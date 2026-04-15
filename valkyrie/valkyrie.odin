@@ -32,35 +32,65 @@ import "core:fmt"
 import sdl "vendor:sdl3"
 import gl "vendor:OpenGL"
 
+Window :: struct {
+    width: int,
+    height: int,
+    title: string,
+    handle: rawptr,
+    gl_ctx: rawptr,
+    running: bool,
+}
 
-create_window :: proc(width, height: int, title: string) {
+create_window :: proc(width, height: int, title: string) -> Window {
     assert(sdl.Init({.VIDEO}))
     window := sdl.CreateWindow(fmt.ctprint(title), i32(width), i32(height), {.OPENGL})
-    gtxt := sdl.GL_CreateContext(window)
-
+    gl_ctx := sdl.GL_CreateContext(window)
+    sdl.GL_MakeCurrent(window, gl_ctx)
     gl.load_up_to(3, 3, sdl.gl_set_proc_address)
-    running := true
 
-    for running {
-        event: sdl.Event
-        for sdl.PollEvent(&event) {
-            #partial switch event.type {
-            case .QUIT:
-                running = false
-            case .KEY_DOWN:
-                #partial switch event.key.scancode {
-                case .ESCAPE:
-                    running = false
-                }
+    return {width, height, title, rawptr(window), rawptr(gl_ctx), true}
+}
+
+poll_events :: proc(window: ^Window) {
+    event: sdl.Event
+    for sdl.PollEvent(&event) {
+        #partial switch event.type {
+        case .QUIT:
+            close_window(window)
+        case .KEY_DOWN:
+            #partial switch event.key.scancode {
+            case .ESCAPE:
+                close_window(window)
             }
         }
-
-        gl.Viewport(0,0, i32(width), i32(height))
-        gl.ClearColor(0.2, 0.2, 0.8, 1.0)
-        gl.Clear(gl.COLOR_BUFFER_BIT)
-
-        sdl.GL_SwapWindow(window)
-
-        free_all(context.temp_allocator)
     }
+}
+
+should_close :: proc(window: Window) -> bool {
+    return !window.running
+}
+
+close_window :: proc(window: ^Window) {
+    window.running = false
+}
+
+render_begin :: proc(window: Window) {
+    gl.Viewport(0, 0, i32(window.width), i32(window.height))
+    gl.Clear(gl.COLOR_BUFFER_BIT)
+}
+
+clear_color :: proc(color: [4]f32) {
+    gl.ClearColor(color.r, color.g, color.b, color.a)
+}
+
+render_end :: proc(window: Window) {
+    sdl.GL_SwapWindow(cast(^sdl.Window)(window.handle))
+}
+
+shutdown :: proc(window: Window) {
+
+    sdl.DestroyWindow(cast(^sdl.Window)window.handle)
+    gl_ctx := cast(^sdl.GLContext)(window.gl_ctx)
+    sdl.GL_DestroyContext(gl_ctx^)
+    sdl.Quit()
 }

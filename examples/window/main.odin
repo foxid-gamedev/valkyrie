@@ -30,5 +30,16 @@ package main
 import val "../../valkyrie"
 
 main :: proc() {
-    val.create_window(800, 600, "My Window")
+    window := val.create_window(800, 600, "My Window")
+    defer val.shutdown(window)
+
+    for !val.should_close(window) {
+        val.poll_events(&window)
+
+        val.render_begin(window)
+        val.clear_color({0.2, 0.2, 0.8, 1.0})
+        val.render_end(window)
+
+        free_all(context.temp_allocator)
+    }
 }
