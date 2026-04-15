@@ -1,0 +1,12 @@
+/bin/
+/.vscode/
+
+*.dll
+*.so
+*.lib
+*.a
+*.exe
+*.bin
+*.pdb
+
+ols.json
