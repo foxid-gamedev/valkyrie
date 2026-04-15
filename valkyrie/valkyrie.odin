@@ -29,6 +29,38 @@ package valkyrie
 
 import "core:fmt"
 
+import sdl "vendor:sdl3"
+import gl "vendor:OpenGL"
+
+
 create_window :: proc(width, height: int, title: string) {
-    fmt.println("window created with width:", width, " height:", height, "title:", title)
+    assert(sdl.Init({.VIDEO}))
+    window := sdl.CreateWindow(fmt.ctprint(title), i32(width), i32(height), {.OPENGL})
+    gtxt := sdl.GL_CreateContext(window)
+
+    gl.load_up_to(3, 3, sdl.gl_set_proc_address)
+    running := true
+
+    for running {
+        event: sdl.Event
+        for sdl.PollEvent(&event) {
+            #partial switch event.type {
+            case .QUIT:
+                running = false
+            case .KEY_DOWN:
+                #partial switch event.key.scancode {
+                case .ESCAPE:
+                    running = false
+                }
+            }
+        }
+
+        gl.Viewport(0,0, i32(width), i32(height))
+        gl.ClearColor(0.2, 0.2, 0.8, 1.0)
+        gl.Clear(gl.COLOR_BUFFER_BIT)
+
+        sdl.GL_SwapWindow(window)
+
+        free_all(context.temp_allocator)
+    }
 }

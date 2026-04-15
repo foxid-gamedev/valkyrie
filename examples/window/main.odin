@@ -30,5 +30,5 @@ package main
 import val "../../valkyrie"
 
 main :: proc() {
-    val.create_window(800, 600, "Window")
+    val.create_window(800, 600, "My Window")
 }
