@@ -27,19 +27,63 @@
 
 package main
 
+import "core:log"
+
 import val "../../valkyrie"
+import gl "vendor:OpenGL"
+
+Vertex :: struct {
+	position: val.Vec2,
+	color:    val.Color,
+}
 
 main :: proc() {
-    window := val.create_window(800, 600, "My Window")
-    defer val.shutdown(window)
+	context.logger = log.create_console_logger()
+	val.create_window(800, 600, "My Window")
+	defer val.shutdown()
 
-    for !val.should_close(window) {
-        val.poll_events(&window)
+	shader, shader_ok := val.load_shader("shader/triangle.vs", "shader/triangle.fs")
+    vao, vbo := generate_triangle()
 
-        val.render_begin(window)
-        val.clear_color({0.2, 0.2, 0.8, 1.0})
-        val.render_end(window)
+	for !val.should_close() {
+		val.poll_events()
 
-        free_all(context.temp_allocator)
-    }
+		val.render_begin()
+		val.clear_color(val.VALKYRIE_BLUE)
+
+		val.shader_bind(shader)
+		draw_triangle(vao)
+
+        val.render_end()
+
+		free_all(context.temp_allocator)
+	}
+}
+
+generate_triangle :: proc() -> (vao, vbo: u32) {
+	gl.GenVertexArrays(1, &vao)
+	gl.GenBuffers(1, &vbo)
+
+	gl.BindVertexArray(vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, vbo)
+
+	vertices := [3]Vertex {
+		{{0.0, 0.5}, {1, 0, 0, 1}},
+		{{0.5, -0.5}, {0, 1, 0, 1}},
+		{{-0.5, -0.5}, {0, 0, 1, 1}},
+	}
+
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(Vertex), &vertices[0], gl.STATIC_DRAW)
+    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, position))
+    gl.EnableVertexAttribArray(0)
+    gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, color))
+    gl.EnableVertexAttribArray(1)
+    gl.BindVertexArray(0)
+
+    return vao, vbo
+}
+
+draw_triangle :: proc(vao: u32) {
+    gl.BindVertexArray(vao)
+    gl.DrawArrays(gl.TRIANGLES, 0, 3)
 }

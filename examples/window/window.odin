@@ -28,24 +28,19 @@
 package main
 
 import "core:log"
-
 import val "../../valkyrie"
 
 main :: proc() {
     context.logger = log.create_console_logger()
-    window := val.create_window(800, 600, "My Window")
-    defer val.shutdown(window)
+    val.create_window(800, 600, "My Window")
+    defer val.shutdown()
 
-    shader, shader_ok := val.load_shader("shader.vert", "shader.frag")
+    for !val.should_close() {
+        val.poll_events()
 
-    for !val.should_close(window) {
-        val.poll_events(&window)
-
-        val.render_begin(window)
-        val.clear_color({0.2, 0.2, 0.8, 1.0})
-
-        val.shader_use(shader)
-        val.render_end(window)
+        val.render_begin()
+        val.clear_color(val.VALKYRIE_BLUE)
+        val.render_end()
 
         free_all(context.temp_allocator)
     }

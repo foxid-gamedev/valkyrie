@@ -2,7 +2,8 @@
 
 ### First simple version (OpenGL/SDL3)
 - [x] Create a Window
-- [ ] Loading Shaders
+- [x] Loading Shaders
+- [x] Batch render supporting colored rectangles
 - [ ] Loading Textures
 - [ ] Drawing 2d Textures
 - [ ] Simple 2d Camera
