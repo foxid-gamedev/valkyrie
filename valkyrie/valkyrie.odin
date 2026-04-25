@@ -1,7 +1,7 @@
 /******************************************************************************/
 /* valkyrie.odin                                                              */
 /******************************************************************************/
-/* License                                                                    */
+/* MIT License                                                                */
 /* Copyright (c) 2026 Marcel Kübler Software.                                 */
 /*                                                                            */
 /* Permission is hereby granted, free of charge, to any person obtaining a    */
@@ -34,6 +34,7 @@ import "core:math"
 import lin "core:math/linalg"
 import "core:os"
 import "core:strings"
+import stbi "vendor:stb/image"
 
 import gl "vendor:OpenGL"
 import "vendor:glfw"
@@ -41,12 +42,16 @@ import "vendor:glfw"
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
-Rect :: struct { x, y, w, h: f32 }
+Rect :: struct {
+	x, y, w, h: f32,
+}
 Mat4 :: lin.Matrix4f32
 Shader :: u32
 Color :: Vec4
 
 VALKYRIE_BLUE :: Color{0.025, 0.025, 0.112, 1.0}
+WHITE :: Color{1,1,1,1}
+BLACK :: Color{0,0,0,1}
 
 BATCH_MAX_QUADS :: 65536
 VERTICES_PER_QUAD :: 4
@@ -61,6 +66,8 @@ Val_State :: struct {
 	window:          glfw.WindowHandle,
 	batch:           Renderer,
 	projection_view: Mat4,
+	last_time:       f64,
+	delta_time:      f32,
 }
 
 Texture :: struct {
@@ -74,7 +81,6 @@ Vertex :: struct {
 	position: Vec2,
 	uv:       Vec2,
 	tint:     Vec4,
-	texture:  i32,
 	layer:    i32,
 }
 
@@ -84,6 +90,8 @@ Renderer :: struct {
 	ebo:      u32,
 	vertices: [dynamic]Vertex,
 	shader:   Shader,
+	basic_texture: Texture,
+	last_texture_id: u32,
 }
 
 @(private = "file")
@@ -131,22 +139,14 @@ create_window :: proc(width, height: int, title: string) {
 
 		gl.BindBuffer(gl.ARRAY_BUFFER, s.batch.vbo)
 		gl.BufferData(gl.ARRAY_BUFFER, BATCH_MAX_VERTICES * size_of(Vertex), nil, gl.DYNAMIC_DRAW)
-		gl.VertexAttribPointer(
-			0,
-			2,
-			gl.FLOAT,
-			gl.FALSE,
-			size_of(Vertex),
-			offset_of(Vertex, position),
-		)
+		gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, position))
 		gl.EnableVertexAttribArray(0)
 		gl.VertexAttribPointer(1, 2, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, uv))
 		gl.EnableVertexAttribArray(1)
 		gl.VertexAttribPointer(2, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, tint))
 		gl.EnableVertexAttribArray(2)
-		gl.VertexAttribPointer(3, 1, gl.INT, gl.FALSE, size_of(Vertex), offset_of(Vertex, texture))
+		gl.VertexAttribPointer(3, 1, gl.INT, gl.FALSE, size_of(Vertex), offset_of(Vertex, layer))
 		gl.EnableVertexAttribArray(3)
-		gl.VertexAttribPointer(4, 1, gl.INT, gl.FALSE, size_of(Vertex), offset_of(Vertex, layer))
 
 		// element buffer
 		gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, s.batch.ebo)
@@ -174,10 +174,31 @@ create_window :: proc(width, height: int, title: string) {
 	}
 
 	s.projection_view = lin.matrix_ortho3d_f32(0, f32(width), f32(height), 0, -1, 1)
+
+	// create basic texture
+	{
+		pixels := [4]u8{255, 255, 255, 255}
+		s.batch.basic_texture.width = 1
+		s.batch.basic_texture.height = 1
+
+		gl.GenTextures(1, &s.batch.basic_texture.id)
+		gl.BindTexture(gl.TEXTURE_2D, s.batch.basic_texture.id)
+
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(s.batch.basic_texture.width), i32(s.batch.basic_texture.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, &pixels[0])
+	}
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 }
 
 poll_events :: proc() {
 	glfw.PollEvents()
+	_update_frame_time()
 }
 
 should_close :: proc() -> bool {
@@ -193,23 +214,42 @@ render_begin :: proc() {
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-draw_rectangle :: proc(rect: Rect, tint: Color) {
+draw_rectangle :: proc(dest: Rect, tint: Color) {
+	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0)
+}
 
-	append(
-		&s.batch.vertices,
-		Vertex{position = {rect.x, rect.y}, uv = {0, 0}, tint = tint, texture = 0, layer = 0},
+draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, scale: Vec2 = {1,1}, tint: Color = WHITE) {
+	_render_object(
+		texture, 
+		{0,0,f32(texture.width),f32(texture.height)}, 
+		{position.x - origin.x, position.y - origin.y, f32(texture.width) * scale.x, f32(texture.height) * scale.y}, 
+		tint, 
+		0,
 	)
-	append(
-		&s.batch.vertices,
-		Vertex{position = {rect.x + rect.w, rect.y}, uv = {1.0, 0}, tint = tint, texture = 0, layer = 0},
-	)
-	append(
-		&s.batch.vertices,
-		Vertex{position = {rect.x + rect.w, rect.y + rect.h}, uv = {1.0, 1.0}, tint = tint, texture = 0, layer = 0},
-	)
-	append(
-		&s.batch.vertices,
-		Vertex{position = {rect.x, rect.y + rect.h}, uv = {0.0, 1.0}, tint = tint, texture = 0, layer = 0},
+}
+
+draw_texture_part :: proc(texture: Texture, source, dest: Rect, tint: Color) {
+	_render_object(texture, source, dest, tint, 0)
+}
+
+@(private="file") _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32) {
+	if s.batch.last_texture_id != texture.id {
+		_draw_next_batch(s.batch.last_texture_id)
+		s.batch.last_texture_id = texture.id
+	}
+
+	uv := Rect{
+		x = source.x/f32(texture.width),
+		y = source.y/f32(texture.height),
+		w = source.w/f32(texture.width),
+		h = source.h/f32(texture.height),
+	}
+
+	append(&s.batch.vertices, 
+		Vertex{{dest.x, dest.y},{uv.x,uv.y}, tint, layer}, 
+		Vertex{{dest.x + dest.w, dest.y},{uv.x + uv.w, uv.y}, tint, layer},
+		Vertex{{dest.x + dest.w, dest.y + dest.h},{uv.x + uv.w, uv.y + uv.h}, tint, layer},
+		Vertex{{dest.x, dest.y + dest.h},{uv.x,uv.y + uv.h}, tint, layer},
 	)
 }
 
@@ -217,30 +257,65 @@ clear_color :: proc(color: Color) {
 	gl.ClearColor(color.r, color.g, color.b, color.a)
 }
 
-render_end :: proc() {
-	if len(s.batch.vertices) > 0 {
-		shader_bind(s.batch.shader)
+@(private="file") _draw_next_batch :: proc(texture_id: u32) {
+	if len(s.batch.vertices) ==  0 do return
 
-		gl.UniformMatrix4fv(
-			gl.GetUniformLocation(s.batch.shader, "u_proj_view"),
-			1,
-			gl.FALSE,
-			raw_data(&s.projection_view[0]),
-		)
+	// set texture
+	gl.ActiveTexture(gl.TEXTURE0)
+	gl.BindTexture(gl.TEXTURE_2D, texture_id)
+	
+	// set shader
+	shader_bind(s.batch.shader)
+	gl.UniformMatrix4fv(
+		gl.GetUniformLocation(s.batch.shader, "u_proj_view"),
+		1,
+		gl.FALSE,
+		raw_data(&s.projection_view[0]),
+	)
 
-		gl.BindVertexArray(s.batch.vao)
-		gl.BindBuffer(gl.ARRAY_BUFFER, s.batch.vbo)
-		gl.BufferSubData(
-			gl.ARRAY_BUFFER,
-			0,
-			len(s.batch.vertices) * size_of(Vertex),
-			&s.batch.vertices[0],
-		)
+	// apply dynamic vertices
+	gl.BindVertexArray(s.batch.vao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, s.batch.vbo)
+	gl.BufferSubData(
+		gl.ARRAY_BUFFER,
+		0,
+		len(s.batch.vertices) * size_of(Vertex),
+		&s.batch.vertices[0],
+	)
 
-		quads := len(s.batch.vertices) / 4
-		gl.DrawElements(gl.TRIANGLES, i32(quads) * INDICES_PER_QUAD, gl.UNSIGNED_INT, nil)
-	}
+	// draw elements
+	quads := len(s.batch.vertices) / 4
+	gl.DrawElements(gl.TRIANGLES, i32(quads) * INDICES_PER_QUAD, gl.UNSIGNED_INT, nil)
+
+	// reset vertex length
 	clear(&s.batch.vertices)
+}
+
+render_end :: proc() {
+	_draw_next_batch(s.batch.last_texture_id)
+	// if len(s.batch.vertices) > 0 {
+	// 	shader_bind(s.batch.shader)
+
+	// 	gl.UniformMatrix4fv(
+	// 		gl.GetUniformLocation(s.batch.shader, "u_proj_view"),
+	// 		1,
+	// 		gl.FALSE,
+	// 		raw_data(&s.projection_view[0]),
+	// 	)
+
+	// 	gl.BindVertexArray(s.batch.vao)
+	// 	gl.BindBuffer(gl.ARRAY_BUFFER, s.batch.vbo)
+	// 	gl.BufferSubData(
+	// 		gl.ARRAY_BUFFER,
+	// 		0,
+	// 		len(s.batch.vertices) * size_of(Vertex),
+	// 		&s.batch.vertices[0],
+	// 	)
+
+	// 	quads := len(s.batch.vertices) / 4
+	// 	gl.DrawElements(gl.TRIANGLES, i32(quads) * INDICES_PER_QUAD, gl.UNSIGNED_INT, nil)
+	// }
+	// clear(&s.batch.vertices)
 	glfw.SwapBuffers(s.window)
 }
 
@@ -340,4 +415,62 @@ load_shader :: proc(vertex_filename, fragment_filename: string) -> (Shader, bool
 
 shader_bind :: proc(s: Shader) {
 	gl.UseProgram(s)
+}
+
+delta_time :: proc() -> f32 {
+	return s.delta_time
+}
+
+@(private = "file")
+_update_frame_time :: proc() {
+	current_time := glfw.GetTime()
+	delta := current_time - s.last_time
+	s.last_time = current_time
+	s.delta_time = f32(delta)
+}
+
+window_width :: proc() -> int {
+	return s.width
+}
+
+window_height :: proc() -> int {
+	return s.height
+}
+
+window_title :: proc() -> string {
+	return s.title
+}
+
+load_texture :: proc(file: string) -> (tex: Texture) {
+
+	gl.GenTextures(1, &tex.id)
+	gl.BindTexture(gl.TEXTURE_2D, tex.id)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+	x, y, channels: i32
+	data := stbi.load(fmt.ctprint(file), &x, &y, &channels, 0)
+	if (data == nil) {
+		log.error("Texture::File::Open::Failed:", file)
+		return {}
+	}
+
+	tex.width = int(x)
+	tex.height = int(y)
+
+   format := gl.RGB
+   if channels == 4 {
+      format = gl.RGBA
+   } else if channels == 1 {
+      format = gl.RED
+   }
+
+	gl.TexImage2D(gl.TEXTURE_2D, 0, i32(format), x, y, 0, u32(format), gl.UNSIGNED_BYTE, data)
+	gl.GenerateMipmap(gl.TEXTURE_2D)
+
+	stbi.image_free(data)
+
+	return tex
 }

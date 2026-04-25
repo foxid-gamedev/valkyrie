@@ -4,9 +4,9 @@
 - [x] Create a Window
 - [x] Loading Shaders
 - [x] Batch render supporting colored rectangles
-- [ ] Loading Textures
-- [ ] Drawing 2d Textures
+- [x] Loading Textures
+- [x] Drawing 2d Textures
+- [ ] Load/Render Fonts (Maybe with Fontstash?)
 - [ ] Simple 2d Camera
 - [ ] Provide Input (Keyboard)
-- [ ] Load/Render Fonts (Maybe with Fontstash?)
 - [ ] Make a simple game example

@@ -28,19 +28,36 @@
 package main
 
 import "core:log"
-import val "../../valkyrie"
+import vl "../../valkyrie"
 
 main :: proc() {
     context.logger = log.create_console_logger()
-    val.create_window(800, 600, "My Window")
-    defer val.shutdown()
 
-    for !val.should_close() {
-        val.poll_events()
+    vl.create_window(800, 600, "My Window")
+    defer vl.shutdown()
 
-        val.render_begin()
-        val.clear_color(val.VALKYRIE_BLUE)
-        val.render_end()
+    x : f32 = 0
+    dir: f32 = 1
+    mouse_texture := vl.load_texture("assets/mouse_hand.png")
+
+    for !vl.should_close() {
+        vl.poll_events()
+
+        x += dir * 400 * vl.delta_time()
+
+        if x >= f32(vl.window_width() - 100) {
+            dir = -1
+        } else if x < 0 {
+            dir = 1
+        }
+
+        vl.render_begin()
+        {
+            vl.clear_color(vl.VALKYRIE_BLUE)
+            vl.draw_rectangle({x, 300, 100, 100}, {1.0, 0.66, 0.2, 1.0})
+            vl.draw_texture_pos(mouse_texture, {x,100})
+        }
+        vl.render_end()
 
         free_all(context.temp_allocator)
     }
