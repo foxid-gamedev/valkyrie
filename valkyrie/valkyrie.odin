@@ -34,10 +34,11 @@ import "core:math"
 import lin "core:math/linalg"
 import "core:os"
 import "core:strings"
-import stbi "vendor:stb/image"
 
+import stbi "vendor:stb/image"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
+import fon "vendor:fontstash"
 
 Vec2 :: [2]f32
 Vec3 :: [3]f32
@@ -68,6 +69,9 @@ Val_State :: struct {
 	projection_view: Mat4,
 	last_time:       f64,
 	delta_time:      f32,
+	font_ctx: 		  fon.FontContext,
+	font_default: 	  Font,
+	font_atlas:		  Texture,
 }
 
 Texture :: struct {
@@ -92,6 +96,11 @@ Renderer :: struct {
 	shader:   Shader,
 	basic_texture: Texture,
 	last_texture_id: u32,
+}
+
+Font :: struct {
+	name: string,
+	id: int,
 }
 
 @(private = "file")
@@ -194,6 +203,34 @@ create_window :: proc(width, height: int, title: string) {
 
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
+	// enable fontstash
+	{
+		fon.Init(&s.font_ctx, 512, 512, .TOPLEFT)
+		s.font_default.name = "Pangolin"
+		
+		data, data_ok := os.read_entire_file("assets/Pangolin-Regular.ttf", context.temp_allocator)
+		if data_ok != os.General_Error.None {
+			log.error("Failed to load font:", s.font_default.name, " with err:", data_ok)
+		}
+		
+		s.font_default.id = fon.AddFontMem(&s.font_ctx, "", data, false)
+		s.font_atlas.width = 512
+		s.font_atlas.height = 512
+
+		gl.GenTextures(1, &s.font_atlas.id)
+		gl.BindTexture(gl.TEXTURE_2D, s.font_atlas.id)
+
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
+		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+
+		tex_data := s.font_ctx.fonts[s.font_default.id].loadedData
+
+		// fmt.println(texture_data)
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RED, i32(s.font_atlas.width), i32(s.font_atlas.height), 0, gl.RED, gl.UNSIGNED_BYTE, &tex_data[0])
+	}
 }
 
 poll_events :: proc() {
@@ -226,6 +263,46 @@ draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, sc
 		tint, 
 		0,
 	)
+}
+
+draw_fps :: proc(position: Vec2, font_size: f32, color: Color = WHITE) {
+	fps := int(math.floor(1.0/delta_time()))
+	draw_text(fmt.tprint("FPS:", fps), position, font_size, color)
+}
+
+draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = WHITE) {
+	fon.SetFont(&s.font_ctx, s.font_default.id)
+	fon.SetColor(&s.font_ctx, as_color_u8(color))
+	fon.SetSize(&s.font_ctx, font_size)
+	iter := fon.TextIterInit(&s.font_ctx, position.x, position.y, text)
+
+	q: fon.Quad
+	for fon.TextIterNext(&s.font_ctx, &iter, &q) {
+		if iter.codepoint == '\n' {
+			iter.nexty += font_size
+			iter.nextx = position.x
+			continue
+		}
+
+		// source := Rect {
+		// 	q.s0, q.t0,
+		// 	q.s1 - q.s0, q.t1 - q.t0,
+		// }
+
+		source := Rect {
+			q.s0 * 512,
+			q.t0 * 512,
+			(q.s1 - q.s0) * 512,
+			(q.t1 - q.t0) * 512,
+		}
+
+		dest := Rect {
+			position.x + q.x0, position.y + q.y0,
+			q.x1 - q.x0, q.y1 - q.y0,
+		}
+
+		_render_object(s.font_atlas, source, dest, color, 0)
+	}
 }
 
 draw_texture_part :: proc(texture: Texture, source, dest: Rect, tint: Color) {
@@ -293,33 +370,11 @@ clear_color :: proc(color: Color) {
 
 render_end :: proc() {
 	_draw_next_batch(s.batch.last_texture_id)
-	// if len(s.batch.vertices) > 0 {
-	// 	shader_bind(s.batch.shader)
-
-	// 	gl.UniformMatrix4fv(
-	// 		gl.GetUniformLocation(s.batch.shader, "u_proj_view"),
-	// 		1,
-	// 		gl.FALSE,
-	// 		raw_data(&s.projection_view[0]),
-	// 	)
-
-	// 	gl.BindVertexArray(s.batch.vao)
-	// 	gl.BindBuffer(gl.ARRAY_BUFFER, s.batch.vbo)
-	// 	gl.BufferSubData(
-	// 		gl.ARRAY_BUFFER,
-	// 		0,
-	// 		len(s.batch.vertices) * size_of(Vertex),
-	// 		&s.batch.vertices[0],
-	// 	)
-
-	// 	quads := len(s.batch.vertices) / 4
-	// 	gl.DrawElements(gl.TRIANGLES, i32(quads) * INDICES_PER_QUAD, gl.UNSIGNED_INT, nil)
-	// }
-	// clear(&s.batch.vertices)
 	glfw.SwapBuffers(s.window)
 }
 
 shutdown :: proc() {
+	fon.Destroy(&s.font_ctx)
 	glfw.DestroyWindow(s.window)
 	glfw.Terminate()
 	delete(s.batch.vertices)
@@ -473,4 +528,13 @@ load_texture :: proc(file: string) -> (tex: Texture) {
 	stbi.image_free(data)
 
 	return tex
+}
+
+as_color_u8 :: proc(color: Color) -> [4]u8 {
+	return {
+		u8(math.round(color.r * 255.0)),
+		u8(math.round(color.g * 255.0)),
+		u8(math.round(color.b * 255.0)),
+		u8(math.round(color.a * 255.0)),
+	}
 }

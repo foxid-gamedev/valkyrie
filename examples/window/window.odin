@@ -56,6 +56,9 @@ main :: proc() {
             vl.clear_color(vl.VALKYRIE_BLUE)
             vl.draw_rectangle({x, 300, 100, 100}, {1.0, 0.66, 0.2, 1.0})
             vl.draw_texture_pos(mouse_texture, {x,100})
+
+            vl.draw_fps({10, 10}, 64)
+            vl.draw_text("HALLO WELT", {10, 70}, 32, {1,0,0,1})
         }
         vl.render_end()
 
