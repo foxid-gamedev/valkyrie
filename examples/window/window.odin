@@ -1,5 +1,5 @@
 /******************************************************************************/
-/* main.odin                                                                  */
+/* window.odin                                                                */
 /******************************************************************************/
 /* License                                                                    */
 /* Copyright (c) 2026 Marcel Kübler Software.                                 */
@@ -27,8 +27,18 @@
 
 package main
 
-import val "../../valkyrie"
+import vl "../../valkyrie"
 
 main :: proc() {
-    val.create_window(800, 600, "Window")
+    vl.create_window(800, 600, "Window Example")
+    defer vl.shutdown()
+    vl.set_vsync(true)
+
+    for !vl.should_close() {
+        vl.poll_events()
+        vl.render_begin()
+        vl.clear_color(vl.VALKYRIE_BLUE)
+        vl.render_end()
+        free_all(context.temp_allocator)
+    }
 }
