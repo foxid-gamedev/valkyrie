@@ -44,7 +44,7 @@ main :: proc() {
 
     for !vl.should_close() {
         vl.poll_events()
-        if vl.key_pressed(256) do vl.close_window()
+        if vl.key_escape_pressed(256) do vl.close_window()
 
         x += dir * 400 * vl.delta_time()
 
@@ -61,10 +61,11 @@ main :: proc() {
             vl.draw_texture_pos(mouse_texture, {x,100})
 
             vl.draw_fps({0, 0}, 64, {0, 1, 0, 1})
-            vl.draw_text("Odin + Valkyrie", {0, 0}, 128, {1, 0.5, 0, 1})
+            vl.draw_text("Valkyrie\n2-Valkyrie", {0, 0}, 128, {1, 0.5, 0, 1})
+            vl.draw_text("Odin\n2-Odin", {0,0}, 256, {0, 0, 1.0, 1.0})
         }
         vl.render_end()
 
         free_all(context.temp_allocator)
     }
-}
+}   

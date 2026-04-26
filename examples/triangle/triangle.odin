@@ -49,12 +49,10 @@ main :: proc() {
 		val.poll_events()
 
 		val.render_begin()
-		val.clear_color(val.VALKYRIE_BLUE)
-
-		val.shader_bind(shader)
-		draw_triangle(vao)
-
-        val.render_end()
+			val.clear_color(val.VALKYRIE_BLUE)
+			val.shader_bind(shader)
+			draw_triangle(vao)
+      val.render_end()
 
 		free_all(context.temp_allocator)
 	}
@@ -74,16 +72,16 @@ generate_triangle :: proc() -> (vao, vbo: u32) {
 	}
 
 	gl.BufferData(gl.ARRAY_BUFFER, len(vertices) * size_of(Vertex), &vertices[0], gl.STATIC_DRAW)
-    gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, position))
-    gl.EnableVertexAttribArray(0)
-    gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, color))
-    gl.EnableVertexAttribArray(1)
-    gl.BindVertexArray(0)
-
-    return vao, vbo
+   gl.VertexAttribPointer(0, 2, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, position))
+   gl.EnableVertexAttribArray(0)
+   gl.VertexAttribPointer(1, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, color))
+   gl.EnableVertexAttribArray(1)
+   gl.BindVertexArray(0)
+   
+	return vao, vbo
 }
 
 draw_triangle :: proc(vao: u32) {
-    gl.BindVertexArray(vao)
-    gl.DrawArrays(gl.TRIANGLES, 0, 3)
+   gl.BindVertexArray(vao)
+   gl.DrawArrays(gl.TRIANGLES, 0, 3)
 }
