@@ -27,6 +27,7 @@
 
 package valkyrie
 
+import "core:unicode/utf8"
 import "base:runtime"
 import "core:fmt"
 import "core:log"
@@ -35,17 +36,15 @@ import lin "core:math/linalg"
 import "core:os"
 import "core:strings"
 
-import stbi "vendor:stb/image"
+import "vendor:stb/image"
+import "vendor:stb/truetype"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
-import fon "vendor:fontstash"
 
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
-Rect :: struct {
-	x, y, w, h: f32,
-}
+Rect :: struct { x, y, w, h: f32 }
 Mat4 :: lin.Matrix4f32
 Shader :: u32
 Color :: Vec4
@@ -60,6 +59,9 @@ INDICES_PER_QUAD :: 6
 BATCH_MAX_VERTICES :: BATCH_MAX_QUADS * VERTICES_PER_QUAD
 BATCH_MAX_INDICES :: BATCH_MAX_QUADS * INDICES_PER_QUAD
 FONT_ATLAS_SIZE :: 1024
+FONT_SIZE :: 64
+FONT_FIRST_UNICODE_IN_RANGE :: 32
+FONT_UNICODE_RANGE :: 95
 
 Val_State :: struct {
 	width:           int,
@@ -70,9 +72,10 @@ Val_State :: struct {
 	projection_view: Mat4,
 	last_time:       f64,
 	delta_time:      f32,
-	font_ctx: 		  fon.FontContext,
-	font_default: 	  Font,
+
+	font_info: 		  truetype.fontinfo,
 	font_atlas:		  Texture,
+	font_pack: 		  [95]truetype.packedchar,
 }
 
 Texture :: struct {
@@ -90,18 +93,13 @@ Vertex :: struct {
 }
 
 Renderer :: struct {
-	vao:      u32,
-	vbo:      u32,
-	ebo:      u32,
-	vertices: [dynamic]Vertex,
-	shader:   Shader,
-	basic_texture: Texture,
+	vao:             u32,
+	vbo:             u32,
+	ebo:             u32,
+	vertices:        [dynamic]Vertex,
+	shader:          Shader,
+	basic_texture:   Texture,
 	last_texture_id: u32,
-}
-
-Font :: struct {
-	name: string,
-	id: int,
 }
 
 @(private = "file")
@@ -202,42 +200,60 @@ create_window :: proc(width, height: int, title: string) {
 		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(s.batch.basic_texture.width), i32(s.batch.basic_texture.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, &pixels[0])
 	}
 
-	gl.Enable(gl.BLEND)
-	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
-
 	// enable fontstash
 	{
-		fon.Init(&s.font_ctx, FONT_ATLAS_SIZE, FONT_ATLAS_SIZE, .TOPLEFT)
-		s.font_default.name = "Pangolin"
-		
-		data, data_ok := os.read_entire_file("assets/Pangolin-Regular.ttf", context.temp_allocator)
+		FONT_FILE :: "assets/Pangolin-Regular.ttf"
+		data, data_ok := os.read_entire_file(FONT_FILE, context.temp_allocator)
 		if data_ok != os.General_Error.None {
-			log.error("Failed to load font:", s.font_default.name, " with err:", data_ok)
+			log.error("Failed to load font:", FONT_FILE," with err:", data_ok)
+		}
+
+		if ok := truetype.InitFont(&s.font_info, raw_data(data), 0); !ok {
+			log.error("Failed to initialize font:", FONT_FILE)
 		}
 		
-		s.font_default.id = fon.AddFontMem(&s.font_ctx, "", data, false)
 		s.font_atlas.width = FONT_ATLAS_SIZE
 		s.font_atlas.height = FONT_ATLAS_SIZE
+		bitmap := make([]u8, s.font_atlas.width * s.font_atlas.height, context.temp_allocator)
+
+		pc: truetype.pack_context
+		if truetype.PackBegin(&pc, raw_data(bitmap), i32(s.font_atlas.width), i32(s.font_atlas.height), 0, 1, nil) == 0 {
+			log.error("Failed to pack font: ", FONT_FILE)
+		}
+
+		truetype.PackSetOversampling(&pc, 2, 2)
+		truetype.PackFontRange(&pc, raw_data(data), 0, FONT_SIZE, FONT_FIRST_UNICODE_IN_RANGE, FONT_UNICODE_RANGE, &s.font_pack[0])
+		truetype.PackEnd(&pc)
 
 		gl.GenTextures(1, &s.font_atlas.id)
 		gl.BindTexture(gl.TEXTURE_2D, s.font_atlas.id)
-
+		gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR)
 		gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
-
-		tex_data := s.font_ctx.fonts[s.font_default.id].loadedData
-
-		// fmt.println(tex_data)
-		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RED, i32(s.font_atlas.width), i32(s.font_atlas.height), 0, gl.RED, gl.UNSIGNED_BYTE, &tex_data[0])
+		
+		swizzle: [4]i32 = {gl.RED, gl.RED, gl.RED, gl.RED}
+		gl.TexParameteriv(gl.TEXTURE_2D, gl.TEXTURE_SWIZZLE_RGBA, &swizzle[0])
+		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.R8, i32(s.font_atlas.width), i32(s.font_atlas.height), 0, gl.RED, gl.UNSIGNED_BYTE, &bitmap[0])
 	}
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 }
 
 poll_events :: proc() {
 	glfw.PollEvents()
 	_update_frame_time()
 }
+
+set_vsync :: proc(vsync: bool) {
+	if vsync {
+		glfw.SwapInterval(1)
+	} else {
+		glfw.SwapInterval(0)
+	}
+} 
 
 should_close :: proc() -> bool {
 	return bool(glfw.WindowShouldClose(s.window))
@@ -272,74 +288,50 @@ draw_fps :: proc(position: Vec2, font_size: f32, color: Color = WHITE) {
 }
 
 draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = WHITE) {
-	fon.SetFont(&s.font_ctx, s.font_default.id)
-	fon.SetColor(&s.font_ctx, as_color_u8(color))
-	fon.SetSize(&s.font_ctx, font_size)
-	iter := fon.TextIterInit(&s.font_ctx, position.x, position.y, text)
+	x := position.x
+	y := position.y
+	
+	factor := f32(font_size/FONT_SIZE)
+	window_top_bar_offset : f32 = FONT_SIZE/2 * 1.5
 
-	q: fon.Quad
-	@static done: bool
-
-	state := fon.__getState(&s.font_ctx)
-
-	state^ = {
-		size = font_size,
-		blur = 0,
-		spacing = 0,
-		font = int(s.font_default.id),
-		ah = fon.AlignHorizontal(.LEFT),
-		av = fon.AlignVertical(.TOP),
-	}
-
-	i: int
-	for fon.TextIterNext(&s.font_ctx, &iter, &q) {
-		if iter.codepoint == '\n' {
-			iter.nexty += font_size
-			iter.nextx = position.x
+	for r in text {
+		if r == '\n' {
+			x = position.x
+			y += factor
 			continue
 		}
 
-		// source := Rect {
-		// 	q.s0, q.t0,
-		// 	q.s1 - q.s0, q.t1 - q.t0,
-		// }
+		rf := r
 
-		source := Rect {
-			q.s0, q.t0,
-			q.s1, q.t1,
+		if r < 32 || r > 126 {
+			rf = '?'
 		}
 
-		// source.w *= FONT_ATLAS_SIZE
-		// source.h *= FONT_ATLAS_SIZE
+		char_index := int(rf) - 32
+		q: truetype.aligned_quad
+		truetype.GetPackedQuad(&s.font_pack[0], i32(s.font_atlas.width), i32(s.font_atlas.height), i32(char_index), &x, &y, &q, true)
 
-		// source := Rect {
-		// 	q.s0 * 512,
-		// 	q.t0 * 512,
-		// 	(q.s1 - q.s0) * 512,
-		// 	(q.t1 - q.t0) * 512,
-		// }
-
-		// if !done {
-		// 	if i <= 5 {
-		// 		fmt.print("{", source.x, source.y, source.w, source.h, "},")
-		// 	} else {
-		// 		done = true
-		// 	}
-
-		// 	i += 1
-		// }
-
-		dest := Rect {
-			position.x + q.x0, position.y + q.y0,
-			q.x1, q.y1,
+		source: Rect = {
+			q.s0 * f32(s.font_atlas.width),
+			q.t0 * f32(s.font_atlas.height),
+			(q.s1 - q.s0) * f32(s.font_atlas.width),
+			(q.t1 - q.t0) * f32(s.font_atlas.height),
 		}
 
-		// dest := Rect {
-		// 	q.x0,
-		// 	q.y1,  // bottom-left für Y-up OpenGL
-		// 	q.x1 - q.x0,
-		// 	q.y0 - q.y1,  // positive height
-		// }
+		dest: Rect = {
+			q.x0,
+			q.y0 + window_top_bar_offset,
+			q.x1 - q.x0,
+			q.y1 - q.y0,
+		}
+
+		dest.x *= factor
+		dest.y *= factor
+		dest.w *= factor
+		dest.h *= factor
+
+		dest.x += position.x
+		dest.y += position.y
 
 		_render_object(s.font_atlas, source, dest, color, 0)
 	}
@@ -414,7 +406,6 @@ render_end :: proc() {
 }
 
 shutdown :: proc() {
-	fon.Destroy(&s.font_ctx)
 	glfw.DestroyWindow(s.window)
 	glfw.Terminate()
 	delete(s.batch.vertices)
@@ -546,7 +537,7 @@ load_texture :: proc(file: string) -> (tex: Texture) {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
 
 	x, y, channels: i32
-	data := stbi.load(fmt.ctprint(file), &x, &y, &channels, 0)
+	data := image.load(fmt.ctprint(file), &x, &y, &channels, 0)
 	if (data == nil) {
 		log.error("Texture::File::Open::Failed:", file)
 		return {}
@@ -565,7 +556,7 @@ load_texture :: proc(file: string) -> (tex: Texture) {
 	gl.TexImage2D(gl.TEXTURE_2D, 0, i32(format), x, y, 0, u32(format), gl.UNSIGNED_BYTE, data)
 	gl.GenerateMipmap(gl.TEXTURE_2D)
 
-	stbi.image_free(data)
+	image.image_free(data)
 
 	return tex
 }
@@ -577,4 +568,13 @@ as_color_u8 :: proc(color: Color) -> [4]u8 {
 		u8(math.round(color.b * 255.0)),
 		u8(math.round(color.a * 255.0)),
 	}
+}
+
+load_font :: proc(file: string) {
+	
+}
+
+// TODO: Refactor keys
+key_pressed :: proc(key: i32) -> bool {
+	return glfw.GetKey(s.window, key) == glfw.PRESS
 }

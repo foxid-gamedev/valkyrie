@@ -36,12 +36,15 @@ main :: proc() {
     vl.create_window(800, 600, "My Window")
     defer vl.shutdown()
 
+    vl.set_vsync(true)
+
     x : f32 = 0
     dir: f32 = 1
     mouse_texture := vl.load_texture("assets/mouse_hand.png")
 
     for !vl.should_close() {
         vl.poll_events()
+        if vl.key_pressed(256) do vl.close_window()
 
         x += dir * 400 * vl.delta_time()
 
@@ -57,8 +60,8 @@ main :: proc() {
             vl.draw_rectangle({x, 300, 100, 100}, {1.0, 0.66, 0.2, 1.0})
             vl.draw_texture_pos(mouse_texture, {x,100})
 
-            vl.draw_fps({10, 10}, 64)
-            vl.draw_text("HALLO WELT", {10, 70}, 32, {1,0,0,1})
+            vl.draw_fps({0, 0}, 64, {0, 1, 0, 1})
+            vl.draw_text("Odin + Valkyrie", {0, 0}, 128, {1, 0.5, 0, 1})
         }
         vl.render_end()
 
