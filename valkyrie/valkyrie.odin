@@ -59,6 +59,7 @@ VERTICES_PER_QUAD :: 4
 INDICES_PER_QUAD :: 6
 BATCH_MAX_VERTICES :: BATCH_MAX_QUADS * VERTICES_PER_QUAD
 BATCH_MAX_INDICES :: BATCH_MAX_QUADS * INDICES_PER_QUAD
+FONT_ATLAS_SIZE :: 1024
 
 Val_State :: struct {
 	width:           int,
@@ -206,7 +207,7 @@ create_window :: proc(width, height: int, title: string) {
 
 	// enable fontstash
 	{
-		fon.Init(&s.font_ctx, 512, 512, .TOPLEFT)
+		fon.Init(&s.font_ctx, FONT_ATLAS_SIZE, FONT_ATLAS_SIZE, .TOPLEFT)
 		s.font_default.name = "Pangolin"
 		
 		data, data_ok := os.read_entire_file("assets/Pangolin-Regular.ttf", context.temp_allocator)
@@ -215,8 +216,8 @@ create_window :: proc(width, height: int, title: string) {
 		}
 		
 		s.font_default.id = fon.AddFontMem(&s.font_ctx, "", data, false)
-		s.font_atlas.width = 512
-		s.font_atlas.height = 512
+		s.font_atlas.width = FONT_ATLAS_SIZE
+		s.font_atlas.height = FONT_ATLAS_SIZE
 
 		gl.GenTextures(1, &s.font_atlas.id)
 		gl.BindTexture(gl.TEXTURE_2D, s.font_atlas.id)
@@ -228,7 +229,7 @@ create_window :: proc(width, height: int, title: string) {
 
 		tex_data := s.font_ctx.fonts[s.font_default.id].loadedData
 
-		// fmt.println(texture_data)
+		// fmt.println(tex_data)
 		gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RED, i32(s.font_atlas.width), i32(s.font_atlas.height), 0, gl.RED, gl.UNSIGNED_BYTE, &tex_data[0])
 	}
 }
@@ -277,6 +278,20 @@ draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = W
 	iter := fon.TextIterInit(&s.font_ctx, position.x, position.y, text)
 
 	q: fon.Quad
+	@static done: bool
+
+	state := fon.__getState(&s.font_ctx)
+
+	state^ = {
+		size = font_size,
+		blur = 0,
+		spacing = 0,
+		font = int(s.font_default.id),
+		ah = fon.AlignHorizontal(.LEFT),
+		av = fon.AlignVertical(.TOP),
+	}
+
+	i: int
 	for fon.TextIterNext(&s.font_ctx, &iter, &q) {
 		if iter.codepoint == '\n' {
 			iter.nexty += font_size
@@ -290,16 +305,41 @@ draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = W
 		// }
 
 		source := Rect {
-			q.s0 * 512,
-			q.t0 * 512,
-			(q.s1 - q.s0) * 512,
-			(q.t1 - q.t0) * 512,
+			q.s0, q.t0,
+			q.s1, q.t1,
 		}
+
+		// source.w *= FONT_ATLAS_SIZE
+		// source.h *= FONT_ATLAS_SIZE
+
+		// source := Rect {
+		// 	q.s0 * 512,
+		// 	q.t0 * 512,
+		// 	(q.s1 - q.s0) * 512,
+		// 	(q.t1 - q.t0) * 512,
+		// }
+
+		// if !done {
+		// 	if i <= 5 {
+		// 		fmt.print("{", source.x, source.y, source.w, source.h, "},")
+		// 	} else {
+		// 		done = true
+		// 	}
+
+		// 	i += 1
+		// }
 
 		dest := Rect {
 			position.x + q.x0, position.y + q.y0,
-			q.x1 - q.x0, q.y1 - q.y0,
+			q.x1, q.y1,
 		}
+
+		// dest := Rect {
+		// 	q.x0,
+		// 	q.y1,  // bottom-left für Y-up OpenGL
+		// 	q.x1 - q.x0,
+		// 	q.y0 - q.y1,  // positive height
+		// }
 
 		_render_object(s.font_atlas, source, dest, color, 0)
 	}
