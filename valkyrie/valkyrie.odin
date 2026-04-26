@@ -43,6 +43,8 @@ import "vendor:glfw"
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Types                                                                                         //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
@@ -54,6 +56,8 @@ Color :: Vec4
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Colors                                                                                        //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 VALKYRIE_BLUE :: Color{0.025, 0.025, 0.112, 1.0}
 WHITE 		  :: Color{1,1,1,1}
 GRAY			  :: Color{0.5,0.5,0.5,1}
@@ -70,6 +74,8 @@ MAGENTA		  :: Color{1,0,1,1}
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants                                                                                     //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 BATCH_MAX_QUADS :: 65536
 VERTICES_PER_QUAD :: 4
 INDICES_PER_QUAD :: 6
@@ -79,6 +85,8 @@ BATCH_MAX_INDICES :: BATCH_MAX_QUADS * INDICES_PER_QUAD
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 Val_State :: struct {
 	width:           int,
 	height:          int,
@@ -96,6 +104,8 @@ Val_State :: struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Structs                                                                                       //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 Texture :: struct {
 	id:     u32,
 	width:  int,
@@ -125,6 +135,13 @@ Renderer :: struct {
 	last_texture_id: u32,
 }
 
+Camera :: struct {
+	position: Vec2,
+	offset: Vec2,
+	zoom: f32,
+	rotation: f32,
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Local Variables                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -143,7 +160,7 @@ create_window :: proc(width, height: int, title: string) {
 	_create_default_batch_buffers()
 	_gen_basic_rect_texture()
 	s.batch.shader, _ = load_shader("shader/batch.vs", "shader/batch.fs")
-	s.projection_view = lin.matrix_ortho3d_f32(0, f32(width), f32(height), 0, -1, 1)
+	s.projection_view = _get_ortho_matrix()
 	s.font = load_font("assets/Pangolin-Regular.ttf", 128, 4096)
 
 	// Enable alpha blending
@@ -187,6 +204,22 @@ render_begin :: proc() {
 render_end :: proc() {
 	_draw_next_batch(s.batch.last_texture_id)
 	glfw.SwapBuffers(s.window)
+}
+
+
+
+camera_begin :: proc(camera: Camera) {
+	cam_matrix :=
+		lin.matrix4_translate_f32({camera.offset.x, camera.offset.y, 0}) *
+		lin.matrix4_scale_f32({camera.zoom, camera.zoom, 1}) *
+		lin.matrix4_rotate_f32(camera.rotation, {0, 0, 1}) *
+		lin.matrix4_translate_f32({-camera.position.x, -camera.position.y, 0})
+	s.projection_view = _get_ortho_matrix() * cam_matrix
+}
+
+camera_end :: proc() {
+	_draw_next_batch(s.batch.last_texture_id)
+	s.projection_view = _get_ortho_matrix()
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -285,7 +318,7 @@ draw_fps :: proc(position: Vec2, font_size: f32, color: Color = WHITE) {
 
 close_window    :: proc() { glfw.SetWindowShouldClose(s.window, true) } // Close the game window
 clear_color     :: proc(color: Color) { gl.ClearColor(color.r, color.g, color.b, color.a) } // Clear the background with a color
-shader_bind     :: proc(s: Shader) { gl.UseProgram(s) } // Bind/use a shader
+bind_shader     :: proc(s: Shader) { gl.UseProgram(s) } // Bind/use a shader
 delta_time      :: proc() -> f32 { return s.delta_time } // Receive delta time (used for frame time based movement)
 window_width    :: proc() -> int { return s.width } // Get window width
 window_height   :: proc() -> int { return s.height } // Get window height
@@ -293,6 +326,18 @@ window_title    :: proc() -> string { return s.title } // Get window title
 set_vsync       :: proc(vsync: bool) { s.vsync = vsync; if vsync do glfw.SwapInterval(1); else do glfw.SwapInterval(0) } // Enable/Disable vertical sync (monitor)
 vsync			    :: proc() -> bool { return s.vsync } // Get vsync flag
 set_window_size :: proc(size: Vec2) { s.width = int(size.x); s.height = int(size.y); glfw.SetWindowSize(s.window, i32(s.width), i32(s.height)); } // Update/Change the window size
+
+set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {
+	// TODO: make different set uniform functions
+	// TODO: Load uniform locations once 
+
+	gl.UniformMatrix4fv(
+		gl.GetUniformLocation(shader, fmt.ctprint(location)),
+		1,
+		gl.FALSE,
+		raw_data(&value[0]),
+	)
+} 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Loading Assets/Files                                                                          //
@@ -647,13 +692,8 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 	gl.BindTexture(gl.TEXTURE_2D, texture_id)
 	
 	// set shader
-	shader_bind(s.batch.shader)
-	gl.UniformMatrix4fv(
-		gl.GetUniformLocation(s.batch.shader, "u_proj_view"),
-		1,
-		gl.FALSE,
-		raw_data(&s.projection_view[0]),
-	)
+	bind_shader(s.batch.shader)
+	set_uniform_mat4(s.batch.shader, "u_proj_view", &s.projection_view)
 
 	// apply dynamic vertices
 	gl.BindVertexArray(s.batch.vao)
@@ -671,6 +711,10 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 
 	// reset vertex length
 	clear(&s.batch.vertices)
+}
+
+@(private="file") _get_ortho_matrix :: proc() -> Mat4 {
+	return lin.matrix_ortho3d_f32(0, f32(s.width), f32(s.height), 0, -1, 1)
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
