@@ -60,7 +60,7 @@ main :: proc() {
 - [x] Loading Textures (stb:image)
 - [x] Drawing 2d Textures
 - [x] Load/Render Fonts (stb:truetype)
-- [ ] Simple 2d Camera
+- [x] Simple 2d Camera
 - [ ] Provide Input (Keyboard)
 - [ ] Make a simple game example
 
