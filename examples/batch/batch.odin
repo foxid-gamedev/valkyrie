@@ -1,5 +1,5 @@
 /******************************************************************************/
-/* window.odin                                                                */
+/* batch.odin                                                                 */
 /******************************************************************************/
 /* License                                                                    */
 /* Copyright (c) 2026 Marcel Kübler Software.                                 */
@@ -27,18 +27,40 @@
 
 package main
 
+import "core:log"
 import vl "../../valkyrie"
 
 main :: proc() {
-    vl.create_window(800, 600, "Window Example")
+    context.logger = log.create_console_logger()
+
+    vl.create_window(800, 600, "My Window")
     defer vl.shutdown()
+
     vl.set_vsync(true)
+
+    x : f32 = 0
+    dir: f32 = 1
+    mouse_texture := vl.load_texture("assets/mouse_hand.png")
 
     for !vl.should_close() {
         vl.poll_events()
+        if vl.key_escape_pressed(256) do vl.close_window()
+
+        x += dir * 400 * vl.delta_time()
+        if x >= f32(vl.window_width() - 100) {
+            dir = -1
+        } else if x < 0 {
+            dir = 1
+        }
+
         vl.render_begin()
-        vl.clear_color(vl.VALKYRIE_BLUE)
+        {
+            vl.clear_color(vl.VALKYRIE_BLUE)
+            vl.draw_rectangle({700-x, 300, 100, 100}, {1.0, 0.66, 0.2, 1.0})
+            vl.draw_texture_pos(mouse_texture, {x,100})
+        }
         vl.render_end()
+
         free_all(context.temp_allocator)
     }
 }

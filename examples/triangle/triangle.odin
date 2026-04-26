@@ -1,5 +1,5 @@
 /******************************************************************************/
-/* main.odin                                                                  */
+/* triangle.odin                                                              */
 /******************************************************************************/
 /* License                                                                    */
 /* Copyright (c) 2026 Marcel Kübler Software.                                 */
@@ -43,17 +43,16 @@ main :: proc() {
 	defer val.shutdown()
 
 	shader, shader_ok := val.load_shader("shader/triangle.vs", "shader/triangle.fs")
-    vao, vbo := generate_triangle()
+	vao, vbo := generate_triangle()
 
 	for !val.should_close() {
 		val.poll_events()
 
 		val.render_begin()
-			val.clear_color(val.VALKYRIE_BLUE)
-			val.shader_bind(shader)
-			draw_triangle(vao)
+		val.clear_color(val.VALKYRIE_BLUE)
+		val.shader_bind(shader)
+		draw_triangle(vao)
       val.render_end()
-
 		free_all(context.temp_allocator)
 	}
 }

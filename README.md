@@ -4,9 +4,9 @@
 - [x] Create a Window
 - [x] Loading Shaders
 - [x] Batch render supporting colored rectangles
-- [x] Loading Textures
+- [x] Loading Textures (stb:image)
 - [x] Drawing 2d Textures
-- [ ] Load/Render Fonts (Maybe with Fontstash?)
+- [x] Load/Render Fonts (stb:truetype)
 - [ ] Simple 2d Camera
 - [ ] Provide Input (Keyboard)
 - [ ] Make a simple game example
