@@ -81,6 +81,198 @@ VERTICES_PER_QUAD :: 4
 INDICES_PER_QUAD :: 6
 BATCH_MAX_VERTICES :: BATCH_MAX_QUADS * VERTICES_PER_QUAD
 BATCH_MAX_INDICES :: BATCH_MAX_QUADS * INDICES_PER_QUAD
+MAX_GAMEPADS :: 8
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Internal Valkyrie State                                                                       //
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+InputState :: enum {
+	Up,
+	Pressed,
+	Down,
+	Released,
+}
+
+MouseButton :: enum {
+	Left    = glfw.MOUSE_BUTTON_1,
+	Right   = glfw.MOUSE_BUTTON_2,
+	Middle  = glfw.MOUSE_BUTTON_3,
+	Back    = glfw.MOUSE_BUTTON_4,
+	Forward = glfw.MOUSE_BUTTON_5,
+	Extra1  = glfw.MOUSE_BUTTON_6,
+	Extra2  = glfw.MOUSE_BUTTON_7,
+	Extra3  = glfw.MOUSE_BUTTON_8,
+}
+
+
+Key :: enum int {
+	Space        = glfw.KEY_SPACE,
+	Apostrophe   = glfw.KEY_APOSTROPHE,
+	Comma        = glfw.KEY_COMMA,
+	Minus        = glfw.KEY_MINUS,
+	Period       = glfw.KEY_PERIOD,
+	Slash        = glfw.KEY_SLASH,
+	Semicolon    = glfw.KEY_SEMICOLON,
+	Equal        = glfw.KEY_EQUAL,
+	LeftBracket  = glfw.KEY_LEFT_BRACKET,
+	Backslash    = glfw.KEY_BACKSLASH,
+	RightBracket = glfw.KEY_RIGHT_BRACKET,
+	GraveAccent  = glfw.KEY_GRAVE_ACCENT,
+	World1       = glfw.KEY_WORLD_1,
+	World2       = glfw.KEY_WORLD_2,
+
+	Key0 = glfw.KEY_0,
+	Key1 = glfw.KEY_1,
+	Key2 = glfw.KEY_2,
+	Key3 = glfw.KEY_3,
+	Key4 = glfw.KEY_4,
+	Key5 = glfw.KEY_5,
+	Key6 = glfw.KEY_6,
+	Key7 = glfw.KEY_7,
+	Key8 = glfw.KEY_8,
+	Key9 = glfw.KEY_9,
+
+	A = glfw.KEY_A,
+	B = glfw.KEY_B,
+	C = glfw.KEY_C,
+	D = glfw.KEY_D,
+	E = glfw.KEY_E,
+	F = glfw.KEY_F,
+	G = glfw.KEY_G,
+	H = glfw.KEY_H,
+	I = glfw.KEY_I,
+	J = glfw.KEY_J,
+	K = glfw.KEY_K,
+	L = glfw.KEY_L,
+	M = glfw.KEY_M,
+	N = glfw.KEY_N,
+	O = glfw.KEY_O,
+	P = glfw.KEY_P,
+	Q = glfw.KEY_Q,
+	R = glfw.KEY_R,
+	S = glfw.KEY_S,
+	T = glfw.KEY_T,
+	U = glfw.KEY_U,
+	V = glfw.KEY_V,
+	W = glfw.KEY_W,
+	X = glfw.KEY_X,
+	Y = glfw.KEY_Y,
+	Z = glfw.KEY_Z,
+
+	Escape      = glfw.KEY_ESCAPE,
+	Enter       = glfw.KEY_ENTER,
+	Tab         = glfw.KEY_TAB,
+	Backspace   = glfw.KEY_BACKSPACE,
+	Insert      = glfw.KEY_INSERT,
+	Delete      = glfw.KEY_DELETE,
+	Right       = glfw.KEY_RIGHT,
+	Left        = glfw.KEY_LEFT,
+	Down        = glfw.KEY_DOWN,
+	Up          = glfw.KEY_UP,
+	PageUp      = glfw.KEY_PAGE_UP,
+	PageDown    = glfw.KEY_PAGE_DOWN,
+	Home        = glfw.KEY_HOME,
+	End         = glfw.KEY_END,
+	CapsLock    = glfw.KEY_CAPS_LOCK,
+	ScrollLock  = glfw.KEY_SCROLL_LOCK,
+	NumLock     = glfw.KEY_NUM_LOCK,
+	PrintScreen = glfw.KEY_PRINT_SCREEN,
+	Pause       = glfw.KEY_PAUSE,
+
+	F1  = glfw.KEY_F1,
+	F2  = glfw.KEY_F2,
+	F3  = glfw.KEY_F3,
+	F4  = glfw.KEY_F4,
+	F5  = glfw.KEY_F5,
+	F6  = glfw.KEY_F6,
+	F7  = glfw.KEY_F7,
+	F8  = glfw.KEY_F8,
+	F9  = glfw.KEY_F9,
+	F10 = glfw.KEY_F10,
+	F11 = glfw.KEY_F11,
+	F12 = glfw.KEY_F12,
+	F13 = glfw.KEY_F13,
+	F14 = glfw.KEY_F14,
+	F15 = glfw.KEY_F15,
+	F16 = glfw.KEY_F16,
+	F17 = glfw.KEY_F17,
+	F18 = glfw.KEY_F18,
+	F19 = glfw.KEY_F19,
+	F20 = glfw.KEY_F20,
+	F21 = glfw.KEY_F21,
+	F22 = glfw.KEY_F22,
+	F23 = glfw.KEY_F23,
+	F24 = glfw.KEY_F24,
+	F25 = glfw.KEY_F25,
+
+	Kp0        = glfw.KEY_KP_0,
+	Kp1        = glfw.KEY_KP_1,
+	Kp2        = glfw.KEY_KP_2,
+	Kp3        = glfw.KEY_KP_3,
+	Kp4        = glfw.KEY_KP_4,
+	Kp5        = glfw.KEY_KP_5,
+	Kp6        = glfw.KEY_KP_6,
+	Kp7        = glfw.KEY_KP_7,
+	Kp8        = glfw.KEY_KP_8,
+	Kp9        = glfw.KEY_KP_9,
+	KpDecimal  = glfw.KEY_KP_DECIMAL,
+	KpDivide   = glfw.KEY_KP_DIVIDE,
+	KpMultiply = glfw.KEY_KP_MULTIPLY,
+	KpSubtract = glfw.KEY_KP_SUBTRACT,
+	KpAdd      = glfw.KEY_KP_ADD,
+	KpEnter    = glfw.KEY_KP_ENTER,
+	KpEqual    = glfw.KEY_KP_EQUAL,
+
+	LeftShift    = glfw.KEY_LEFT_SHIFT,
+	LeftControl  = glfw.KEY_LEFT_CONTROL,
+	LeftAlt      = glfw.KEY_LEFT_ALT,
+	LeftSuper    = glfw.KEY_LEFT_SUPER,
+	RightShift   = glfw.KEY_RIGHT_SHIFT,
+	RightControl = glfw.KEY_RIGHT_CONTROL,
+	RightAlt     = glfw.KEY_RIGHT_ALT,
+	RightSuper   = glfw.KEY_RIGHT_SUPER,
+	Menu         = glfw.KEY_MENU,
+}
+
+GamepadDevice :: enum i8 {
+	AnyDevice = -1,
+	Device1,
+	Device2,
+	Device3,
+	Device4,
+	Device5,
+	Device6,
+	Device7,
+}
+
+GamepadButton :: enum int {
+	A           = glfw.GAMEPAD_BUTTON_A,
+	B           = glfw.GAMEPAD_BUTTON_B,
+	X           = glfw.GAMEPAD_BUTTON_X,
+	Y           = glfw.GAMEPAD_BUTTON_Y,
+	LeftBumper  = glfw.GAMEPAD_BUTTON_LEFT_BUMPER,
+	RightBumper = glfw.GAMEPAD_BUTTON_RIGHT_BUMPER,
+	Back        = glfw.GAMEPAD_BUTTON_BACK,
+	Start       = glfw.GAMEPAD_BUTTON_START,
+	Guide       = glfw.GAMEPAD_BUTTON_GUIDE,
+	LeftThumb   = glfw.GAMEPAD_BUTTON_LEFT_THUMB,
+	RightThumb  = glfw.GAMEPAD_BUTTON_RIGHT_THUMB,
+	DpadUp      = glfw.GAMEPAD_BUTTON_DPAD_UP,
+	DpadRight   = glfw.GAMEPAD_BUTTON_DPAD_RIGHT,
+	DpadDown    = glfw.GAMEPAD_BUTTON_DPAD_DOWN,
+	DpadLeft    = glfw.GAMEPAD_BUTTON_DPAD_LEFT,
+}
+
+GamepadAxis :: enum int {
+	LeftX        = glfw.GAMEPAD_AXIS_LEFT_X,
+	LeftY        = glfw.GAMEPAD_AXIS_LEFT_Y,
+	RightX       = glfw.GAMEPAD_AXIS_RIGHT_X,
+	RightY       = glfw.GAMEPAD_AXIS_RIGHT_Y,
+	LeftTrigger  = glfw.GAMEPAD_AXIS_LEFT_TRIGGER,
+	RightTrigger = glfw.GAMEPAD_AXIS_RIGHT_TRIGGER,
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
@@ -88,17 +280,20 @@ BATCH_MAX_INDICES :: BATCH_MAX_QUADS * INDICES_PER_QUAD
 
 
 Val_State :: struct {
-	width:           int,
-	height:          int,
-	title:           string,
-	window:          glfw.WindowHandle,
-	batch:           Renderer,
-	projection_view: Mat4,
-	last_time:       f64,
-	delta_time:      f32,
-	vsync:			  bool,
-	font_info: 		  truetype.fontinfo,
-	font:				  Font,
+	width:                       int,
+	height:                      int,
+	title:                       string,
+	window:                      glfw.WindowHandle,
+	batch:                       Renderer,
+	projection_view:             Mat4,
+	last_time:                   f64,
+	delta_time:                  f32,
+	vsync:			              bool,
+	font_info: 		              truetype.fontinfo,
+	font:				              Font,
+	input_key_states:            #sparse [Key]InputState,
+	input_gamepad_button_states: [MAX_GAMEPADS][GamepadButton]InputState,
+	input_gamepad_axis_values:   [MAX_GAMEPADS][GamepadAxis]f32,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -181,6 +376,8 @@ shutdown :: proc() {
 // Necessary to receive any input or closing the window.
 poll_events :: proc() {
 	glfw.PollEvents()
+	_update_key_states()
+	_update_gamepad_states()
 	_update_frame_time()
 }
 
@@ -522,18 +719,85 @@ load_font :: proc(file: string, font_size: f32, atlas_size := 1024) -> (font: Fo
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Input Functions                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+key_is_up       :: proc(key: Key) -> bool { state := s.input_key_states[key]; return state == .Up || state == .Released }  // Key is up (hold)
+key_is_pressed  :: proc(key: Key) -> bool { return s.input_key_states[key] == .Pressed }                                   // Key is pressed (one-time)
+key_is_down     :: proc(key: Key) -> bool { state := s.input_key_states[key]; return state == .Down || state == .Pressed } // Key is down (hold)
+key_is_released :: proc(key: Key) -> bool { return s.input_key_states[key] == .Released }                                  // Key is released (one-time)
+
+// Gamepad button is pressed (one-time)
+gamepad_is_pressed :: proc(button: GamepadButton, device := -1) -> bool {
+	if device >= 0 do return s.input_gamepad_button_states[device][button] == .Pressed
+	for i in 0 ..< MAX_GAMEPADS {
+		if s.input_gamepad_button_states[i][button] == .Pressed do return true
+	}
+	return false
+}
+
+// Gamepad button is down (hold)
+gamepad_is_down :: proc(button: GamepadButton, device := -1) -> bool {
+	if device >= 0 {
+		state := s.input_gamepad_button_states[device][button]
+		return state == .Down || state == .Pressed
+	}
+	for i in 0 ..< MAX_GAMEPADS {
+		state := s.input_gamepad_button_states[i][button]
+		if state == .Down || state == .Pressed do return true
+	}
+	return false
+}
+
+// Gamepad button is released (one-time)
+gamepad_is_released :: proc(button: GamepadButton, device := -1) -> bool {
+	if device >= 0 do return s.input_gamepad_button_states[device][button] == .Released
+	for i in 0 ..< MAX_GAMEPADS {
+		if s.input_gamepad_button_states[i][button] == .Released do return true
+	}
+	return false
+}
+
+// Gamepad button is up (hold)
+gamepad_is_up :: proc(button: GamepadButton, device := -1) -> bool {
+	if device >= 0 {
+		state := s.input_gamepad_button_states[device][button]
+		return state == .Up || state == .Released
+	}
+	return !gamepad_is_down(button)
+}
+
+// Returns axis value (-1.0 to 1.0). With gamepad_id=-1 returns the value with the highest absolute magnitude across all controllers.
+gamepad_axis :: proc(axis: GamepadAxis, device := -1) -> f32 {
+	if device >= 0 do return s.input_gamepad_axis_values[device][axis]
+	result: f32
+	for i in 0 ..< MAX_GAMEPADS {
+		val := s.input_gamepad_axis_values[i][axis]
+		if abs(val) > abs(result) do result = val
+	}
+	return result
+}
+
+// Returns -1, 0 or 1 from two opposing inputs (e.g. left/right keys or analog values)
+input_axis      :: proc {input_axis_bool, input_axis_f32}
+input_axis_bool :: proc(negative, positive: bool) -> f32 { return f32(int(positive)) - f32(int(negative)) }
+input_axis_f32  :: proc(negative, positive: f32)  -> f32 { return positive - negative }
+
+// Returns a 2D direction vector from four opposing inputs
+input_vector      :: proc{input_vector_bool, input_vector_f32}
+input_vector_bool :: proc(left, right, up, down: bool) -> Vec2 { return { f32(int(right)) - f32(int(left)), f32(int(down)) - f32(int(up)) } }
+input_vector_f32  :: proc(left, right, up, down: f32)  -> Vec2 { return { right - left, down - up } }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Util/Math (Helper) Functions                                                                  //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// TODO: Refactor keys (Define Inputs)
-key_escape_pressed :: proc(key: i32) -> bool {
-	return glfw.GetKey(s.window, key) == glfw.PRESS
-}
-
 // Converting/Snapping a normalized color (f32) to color (bytes/u8)
 // 
-// Warning: In case use you any ease/lerp with delta avoid using bytes for colors!
+// Warning: In case you ease/lerp your color with delta, avoid the use of byte-colors entirely!
+// Otherwise you will lose every frame some delta precicion of any fraction smaller than 1/256
 as_color_u8 :: proc(color: Color) -> [4]byte {
 	return {
 		byte(math.round(color.r * 255.0)),
@@ -713,8 +977,67 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 	clear(&s.batch.vertices)
 }
 
+// Get the orthogonal matrix of the current screen size
 @(private="file") _get_ortho_matrix :: proc() -> Mat4 {
 	return lin.matrix_ortho3d_f32(0, f32(s.width), f32(s.height), 0, -1, 1)
+}
+
+// Updates all key states
+@(private="file") _update_key_states :: proc() {
+	for &key_state, key in s.input_key_states {
+		glfw_key_state := glfw.GetKey(s.window, i32(key))
+
+		switch key_state {
+		case .Up:
+			if glfw_key_state == glfw.PRESS do key_state = .Pressed 
+		case .Pressed:
+			if glfw_key_state == glfw.PRESS do key_state = .Down 
+			else if glfw_key_state == glfw.RELEASE do key_state = .Released
+		case .Down:
+			if glfw_key_state == glfw.RELEASE do key_state = .Released 
+		case .Released:
+			if glfw_key_state == glfw.PRESS do key_state = .Pressed 
+			else if glfw_key_state == glfw.RELEASE do key_state = .Up 
+		}
+	}
+}
+
+// Updates all gamepad states
+@(private="file") _update_gamepad_states :: proc() {
+	for i in 0 ..< MAX_GAMEPADS {
+
+		if !glfw.JoystickIsGamepad(i32(i)) {
+			s.input_gamepad_button_states[i] = {}
+			continue
+		}
+
+		glfw_state: glfw.GamepadState
+		if !glfw.GetGamepadState(i32(i), &glfw_state) {
+			s.input_gamepad_button_states[i] = {}
+			continue
+		}
+
+		for &state, button in s.input_gamepad_button_states[i] {
+			pressed := glfw_state.buttons[int(button)] == glfw.PRESS
+
+			switch state {
+			case .Up:
+				if pressed do state = .Pressed
+			case .Pressed:
+				if pressed do state = .Down
+				else do state = .Released
+			case .Down:
+				if !pressed do state = .Released
+			case .Released:
+				if pressed do state = .Pressed
+				else do state = .Up
+			}
+		}
+		
+		for &value, axis in s.input_gamepad_axis_values[i] {
+			value = glfw_state.axes[int(axis)]
+		}
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

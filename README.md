@@ -61,7 +61,8 @@ main :: proc() {
 - [x] Drawing 2d Textures
 - [x] Load/Render Fonts (stb:truetype)
 - [x] Simple 2d Camera
-- [ ] Provide Input (Keyboard)
+- [x] Provide Input (Keyboard)
+- [ ] Audio Support (.wav, .mp3)
 - [ ] Make a simple game example
 
 
