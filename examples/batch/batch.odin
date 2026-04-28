@@ -46,11 +46,11 @@ main :: proc() {
     for !vl.should_close() {
         vl.poll_events()
         if vl.key_is_pressed(.Escape) do vl.close_window()
-        
+
         vl.render_begin()
         {
             vl.clear_color(vl.VALKYRIE_BLUE)
-            vl.draw_rectangle({0, 0, 100, 100}, {1.0, 0.66, 0.2, 1.0})
+            vl.draw_rectangle({200, 40, 100, 100}, {1.0, 0.66, 0.2, 1.0})
             vl.draw_texture_pos(mouse_texture, pos)
         }
         vl.render_end()

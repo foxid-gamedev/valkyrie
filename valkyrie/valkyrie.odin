@@ -27,14 +27,17 @@
 
 package valkyrie
 
-import "core:encoding/hex"
 import "base:runtime"
-import "core:fmt"
+
+import "core:encoding/hex"
+import "core:os"
 import "core:log"
+import "core:fmt"
+import "core:slice"
+import "core:strings"
 import "core:math"
 import lin "core:math/linalg"
-import "core:os"
-import "core:strings"
+
 import "vendor:stb/image"
 import "vendor:stb/truetype"
 import gl "vendor:OpenGL"
@@ -236,17 +239,6 @@ Key :: enum int {
 	Menu         = glfw.KEY_MENU,
 }
 
-GamepadDevice :: enum i8 {
-	AnyDevice = -1,
-	Device1,
-	Device2,
-	Device3,
-	Device4,
-	Device5,
-	Device6,
-	Device7,
-}
-
 GamepadButton :: enum int {
 	A           = glfw.GAMEPAD_BUTTON_A,
 	B           = glfw.GAMEPAD_BUTTON_B,
@@ -294,6 +286,7 @@ Val_State :: struct {
 	input_key_states:            #sparse [Key]InputState,
 	input_gamepad_button_states: [MAX_GAMEPADS][GamepadButton]InputState,
 	input_gamepad_axis_values:   [MAX_GAMEPADS][GamepadAxis]f32,
+	input_active_gamepad:        int,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -727,56 +720,24 @@ key_is_up       :: proc(key: Key) -> bool { state := s.input_key_states[key]; re
 key_is_pressed  :: proc(key: Key) -> bool { return s.input_key_states[key] == .Pressed }                                   // Key is pressed (one-time)
 key_is_down     :: proc(key: Key) -> bool { state := s.input_key_states[key]; return state == .Down || state == .Pressed } // Key is down (hold)
 key_is_released :: proc(key: Key) -> bool { return s.input_key_states[key] == .Released }                                  // Key is released (one-time)
+key_get_state   :: proc(key: Key) -> InputState { return s.input_key_states[key] }                                         // Return key input state
 
-// Gamepad button is pressed (one-time)
-gamepad_is_pressed :: proc(button: GamepadButton, device := -1) -> bool {
-	if device >= 0 do return s.input_gamepad_button_states[device][button] == .Pressed
-	for i in 0 ..< MAX_GAMEPADS {
-		if s.input_gamepad_button_states[i][button] == .Pressed do return true
-	}
-	return false
-}
+gamepad_is_up       :: proc(button: GamepadButton, device := -1) -> bool { return _gamepad_check_game_state(button, {.Up, .Released}, device) }  // Gamepad button is up (hold)
+gamepad_is_pressed  :: proc(button: GamepadButton, device := -1) -> bool { return _gamepad_check_game_state(button, {.Pressed}, device) }        // Gamepad button is pressed (one-time) | device = -1 means take the active gamepad
+gamepad_is_down     :: proc(button: GamepadButton, device := -1) -> bool { return _gamepad_check_game_state(button, {.Down, .Pressed}, device) } // Gamepad button is down (hold) | device = -1 means any gamepad
+gamepad_is_released :: proc(button: GamepadButton, device := -1) -> bool { return _gamepad_check_game_state(button, {.Released}, device) }       // Gamepad button is released (one-time) | device = -1 means any gamepad 
+gamepad_get_state   :: proc(button: GamepadButton, device := -1) -> InputState { return _gamepad_get_game_state(button, device) }                // Return gamepad button input state
 
-// Gamepad button is down (hold)
-gamepad_is_down :: proc(button: GamepadButton, device := -1) -> bool {
-	if device >= 0 {
-		state := s.input_gamepad_button_states[device][button]
-		return state == .Down || state == .Pressed
-	}
-	for i in 0 ..< MAX_GAMEPADS {
-		state := s.input_gamepad_button_states[i][button]
-		if state == .Down || state == .Pressed do return true
-	}
-	return false
-}
-
-// Gamepad button is released (one-time)
-gamepad_is_released :: proc(button: GamepadButton, device := -1) -> bool {
-	if device >= 0 do return s.input_gamepad_button_states[device][button] == .Released
-	for i in 0 ..< MAX_GAMEPADS {
-		if s.input_gamepad_button_states[i][button] == .Released do return true
-	}
-	return false
-}
-
-// Gamepad button is up (hold)
-gamepad_is_up :: proc(button: GamepadButton, device := -1) -> bool {
-	if device >= 0 {
-		state := s.input_gamepad_button_states[device][button]
-		return state == .Up || state == .Released
-	}
-	return !gamepad_is_down(button)
-}
-
-// Returns axis value (-1.0 to 1.0). With gamepad_id=-1 returns the value with the highest absolute magnitude across all controllers.
+// Returns axis value (-1.0 to 1.0). With device=-1 returns the axis of the active/focused gamepad 
 gamepad_axis :: proc(axis: GamepadAxis, device := -1) -> f32 {
-	if device >= 0 do return s.input_gamepad_axis_values[device][axis]
-	result: f32
-	for i in 0 ..< MAX_GAMEPADS {
-		val := s.input_gamepad_axis_values[i][axis]
-		if abs(val) > abs(result) do result = val
+	assert(device >= -1 && device < MAX_GAMEPADS)
+	device := math.clamp(device, -1, MAX_GAMEPADS)
+	
+	if device == -1 {
+ 		return s.input_gamepad_axis_values[s.input_active_gamepad][axis]
+	} else {
+		return s.input_gamepad_axis_values[device][axis]
 	}
-	return result
 }
 
 // Returns -1, 0 or 1 from two opposing inputs (e.g. left/right keys or analog values)
@@ -1004,6 +965,8 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 
 // Updates all gamepad states
 @(private="file") _update_gamepad_states :: proc() {
+	ACTIVE_AXIS_THRESHOLD :: 0.66
+
 	for i in 0 ..< MAX_GAMEPADS {
 
 		if !glfw.JoystickIsGamepad(i32(i)) {
@@ -1022,7 +985,10 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 
 			switch state {
 			case .Up:
-				if pressed do state = .Pressed
+				if pressed {
+					s.input_active_gamepad = i
+					state = .Pressed
+				}
 			case .Pressed:
 				if pressed do state = .Down
 				else do state = .Released
@@ -1036,7 +1002,43 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 		
 		for &value, axis in s.input_gamepad_axis_values[i] {
 			value = glfw_state.axes[int(axis)]
+
+			if math.abs(value) >= ACTIVE_AXIS_THRESHOLD {
+				s.input_active_gamepad = i
+			}
 		}
+	}
+}
+
+// Checks an input gamepad state to expected
+@(private="file") _gamepad_check_game_state :: #force_inline proc(button: GamepadButton, any_expected: []InputState, device := -1) -> bool {
+	assert(device >= -1 && device < MAX_GAMEPADS)
+	device := clamp(device, -1, MAX_GAMEPADS)
+
+	gamepad := device
+	if device == -1 {
+		gamepad = s.input_active_gamepad
+	}
+
+	state := s.input_gamepad_button_states[gamepad][button]
+
+	for expected in any_expected {
+		if state == expected {
+			return true
+		}
+	}
+	return false
+}
+
+// Returns the gamepad input state from any device: 1-8
+_gamepad_get_game_state :: #force_inline proc(button: GamepadButton, device := -1) -> InputState {
+	assert(device >= -1 && device < MAX_GAMEPADS)
+	device := clamp(device, -1, MAX_GAMEPADS)
+
+	if device == -1 {
+		return s.input_gamepad_button_states[s.input_active_gamepad][button]
+	} else {
+		return s.input_gamepad_button_states[device][button]
 	}
 }
 
