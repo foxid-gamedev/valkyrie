@@ -29,7 +29,7 @@
 // TODO:                                                                                         //
 //                                                                                               //
 // - Enhance performance input states                                                            //
-// - Draw text with text alignment                                                               //
+//                                                                                               //
 //                                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1053,7 +1053,7 @@ play_sound :: proc(sound: Sound) {
 	assert(result == .SUCCESS, "starting sound failed")
 }
 
-play_sound_2d :: proc(sound: Sound , pos: Vec2 = {}) {
+play_sound_2d :: proc(sound: Sound , pos: Vec2) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
 	handle := _ma_sound(sound)
 	lpos := pos * 0.001
@@ -1070,7 +1070,27 @@ play_sound_2d :: proc(sound: Sound , pos: Vec2 = {}) {
 	ma.sound_set_min_distance(handle, s.audio.spatial_min_distance * 0.001)
 	ma.sound_set_max_distance(handle, s.audio.spatial_max_distance * 0.001)
 	result := ma.sound_start(handle)
-	assert(result == .SUCCESS, "starting sound failed")
+	assert(result == .SUCCESS, "starting 2d sound failed")
+}
+
+play_sound_2d_range :: proc(sound: Sound, pos: Vec2, min_distance: f32, max_distance: f32, attenuation := AttenuationType.Linear) {
+	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
+	handle := _ma_sound(sound)
+	lpos := pos * 0.001
+	ma.sound_set_position(handle, lpos.x, lpos.y, 0)
+
+	am : ma.attenuation_model
+	switch attenuation {
+	case .Inverse: am = .inverse
+	case .Linear: am = .linear
+	case .Exponential: am = .exponential
+	}
+
+	ma.sound_set_attenuation_model(handle, am)
+	ma.sound_set_min_distance(handle, min_distance * 0.001)
+	ma.sound_set_max_distance(handle, max_distance * 0.001)
+	result := ma.sound_start(handle)
+	assert(result == .SUCCESS, "starting 2d ranged sound failed")
 }
 
 stop_sound :: proc(sound: Sound) {
