@@ -25,8 +25,17 @@
 /* OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                              */
 /******************************************************************************/
 
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// TODO:                                                                                         //
+//                                                                                               //
+// - Enhance performance input states                                                            //
+// - Draw text with text alignment                                                               //
+//                                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
 package valkyrie
 
+import "core:mem"
 import "base:runtime"
 
 import "core:encoding/hex"
@@ -42,6 +51,7 @@ import "vendor:stb/image"
 import "vendor:stb/truetype"
 import gl "vendor:OpenGL"
 import "vendor:glfw"
+import ma "vendor:miniaudio"
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Types                                                                                         //
@@ -287,6 +297,14 @@ Val_State :: struct {
 	input_gamepad_button_states: [MAX_GAMEPADS][GamepadButton]InputState,
 	input_gamepad_axis_values:   [MAX_GAMEPADS][GamepadAxis]f32,
 	input_active_gamepad:        int,
+
+	audio : struct {
+		engine_config:      ma.engine_config,
+		engine:             ma.engine,
+		res_manager_config: ma.resource_manager_config,
+		res_manager:        ma.resource_manager,
+		initialized:        bool,
+	},
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -304,6 +322,11 @@ Font :: struct {
 	atlas: Texture,
 	pack: [dynamic]truetype.packedchar,
 	size: f32,
+}
+
+Sound :: struct {
+	handle: rawptr,
+	_alloc: mem.Allocator,
 }
 
 Vertex :: struct {
@@ -711,6 +734,26 @@ load_font :: proc(file: string, font_size: f32, atlas_size := 1024) -> (font: Fo
 	return font
 }
 
+load_sound :: proc(filename: string, allocator := context.allocator) -> (snd: Sound, ok: bool) {
+	assert(s.audio.initialized, "audio needs to be initialized with audio_init() before loading sound files")
+
+	snd.handle = new(ma.sound, allocator)
+	snd._alloc = allocator
+	result := ma.sound_init_from_file(&s.audio.engine, fmt.ctprint(filename), {}, nil, nil, cast(^ma.sound)(snd.handle))
+	if result != .SUCCESS {
+		free(snd.handle)
+		return {nil, {}}, false
+	}
+	return snd, true
+}
+
+unload_sound :: proc(sound: ^Sound) -> bool {
+	assert(sound.handle != nil, "free_sound failed, sound handle was nil")
+	result := free(sound.handle, sound._alloc)
+	sound.handle = nil
+	return result == .None
+}
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Input Functions                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -749,6 +792,72 @@ input_axis_f32  :: proc(negative, positive: f32)  -> f32 { return positive - neg
 input_vector      :: proc{input_vector_bool, input_vector_f32}
 input_vector_bool :: proc(left, right, up, down: bool) -> Vec2 { return { f32(int(right)) - f32(int(left)), f32(int(down)) - f32(int(up)) } }
 input_vector_f32  :: proc(left, right, up, down: f32)  -> Vec2 { return { right - left, down - up } }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
+// Audio Functions                                                                               //
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+audio_init :: proc() -> bool {
+	assert(!s.audio.initialized, "audio system has already been initialized")
+
+	result: ma.result
+	
+	s.audio.res_manager_config = ma.resource_manager_config_init()
+
+	result = ma.resource_manager_init(&s.audio.res_manager_config, &s.audio.res_manager)
+	if ( result != .SUCCESS) {
+		log.error("AUDIO::INIT::FAILED::RESOURCE_MANAGER_INIT")
+		return false
+	}
+
+	s.audio.engine_config = ma.engine_config_init()
+	s.audio.engine_config.pResourceManager = &s.audio.res_manager
+
+	result = ma.engine_init(&s.audio.engine_config, &s.audio.engine)
+	if ( result != .SUCCESS ) {
+		log.error("AUDIO::INIT::FAILED::ENGINE_INIT")
+		return false
+	}
+
+	s.audio.initialized = true
+	return true
+}
+ 
+audio_shutdown :: proc() {
+	assert(s.audio.initialized, "audio system has already been destroyed")
+	ma.resource_manager_uninit(&s.audio.res_manager)
+	ma.engine_uninit(&s.audio.engine)
+	s.audio.initialized = false
+}
+
+
+audio_listener_set_position :: proc(position: Vec2) {
+	lpos := position * 0.001
+	ma.engine_listener_set_position(&s.audio.engine, 0, lpos.x, lpos.y, 0)
+}
+
+audio_listener_position :: proc() -> Vec2 {
+	lpos := ma.engine_listener_get_position(&s.audio.engine, 0)
+	return {lpos.x, lpos.y} * 1000
+}
+
+
+play_sound :: proc(sound: Sound) {
+	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
+	handle := cast(^ma.sound)sound.handle
+	result := ma.sound_start(handle)
+	assert(result == .SUCCESS, "starting sound failed")
+}
+
+play_sound_2d :: proc(sound: Sound , pos: Vec2 = {}) {
+	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
+	handle := cast(^ma.sound)sound.handle
+	lpos := pos * 0.001
+	ma.sound_set_position(handle, lpos.x, lpos.y, 0)
+	result := ma.sound_start(handle)
+	assert(result == .SUCCESS, "starting sound failed")
+}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Util/Math (Helper) Functions                                                                  //
