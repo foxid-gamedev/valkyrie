@@ -278,6 +278,10 @@ VerticalAlignment :: enum { Top, Center, Bottom }
 
 AttenuationType :: enum { Inverse, Linear, Exponential }
 
+SHAPE_TYPE_RECT :: 0
+SHAPE_TYPE_CIRCLE :: 1
+SHAPE_TYPE_CIRCLE_LINES :: 2
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -342,10 +346,12 @@ AudioBus :: struct {
 
 
 Vertex :: struct {
-	position: Vec2,
-	uv:       Vec2,
-	tint:     Vec4,
-	layer:    i32,
+	position: Vec2,   // pos
+	uv:       Vec2,   // tex-coords
+	tint:     Vec4,   // modulate color
+	layer:    i32,    // z-layer
+	shape: 	 i32,    // shape enum type
+	data:     [4]f32, // shape parameters
 }
 
 Renderer :: struct {
@@ -466,10 +472,38 @@ draw_rectangle_lines :: proc(dest: Rect, tint: Color, thickness: f32 = 1) {
 	hf := tn * 0.5
 	// line order: top -> right -> bottom -> left
 	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, dest.w + hf, tn}, tint, 0)
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x + dest.w - hf, dest.y - hf, tn, dest.h + hf}, tint, 0)
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y + dest.h - hf, dest.w + hf, tn}, tint, 0)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x + dest.w - hf, dest.y - hf, tn, dest.h + tn}, tint, 0)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y + dest.h - hf, dest.w + tn, tn}, tint, 0)
 	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, tn, dest.h + hf}, tint, 0)
 } 
+
+draw_circle :: proc(position: Vec2, radius: f32, tint: Color) {
+	_render_object(
+		s.batch.basic_texture, 
+		{0,0,1,1}, 
+		{position.x - radius, position.y - radius, 2 * radius, 2 * radius},
+		tint,
+		0,
+		SHAPE_TYPE_CIRCLE,
+	)
+}
+
+draw_circle_lines :: proc(position: Vec2, radius: f32, tint: Color, thickness: f32 = 1) {
+	half := thickness * 0.5
+	outer_r := radius + half
+	outer_n := radius / outer_r
+	inner_n := (radius - half) / outer_r
+
+	_render_object(
+		s.batch.basic_texture,
+		{0, 0, 1, 1},
+		{position.x - outer_r, position.y - outer_r, 2 * outer_r, 2 * outer_r},
+		tint,
+		0,
+		SHAPE_TYPE_CIRCLE_LINES,
+		{outer_n, inner_n, 0, 0},
+	)
+}
 
 // Draw a texture at position
 draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, scale: Vec2 = {1,1}, tint: Color = WHITE) {
@@ -1195,8 +1229,12 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 		gl.EnableVertexAttribArray(1)
 		gl.VertexAttribPointer(2, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, tint))
 		gl.EnableVertexAttribArray(2)
-		gl.VertexAttribPointer(3, 1, gl.INT, gl.FALSE, size_of(Vertex), offset_of(Vertex, layer))
+		gl.VertexAttribIPointer(3, 1, gl.INT, size_of(Vertex), offset_of(Vertex, layer))
 		gl.EnableVertexAttribArray(3)
+		gl.VertexAttribIPointer(4, 1, gl.INT, size_of(Vertex), offset_of(Vertex, shape))
+		gl.EnableVertexAttribArray(4)
+		gl.VertexAttribPointer(5, 4, gl.FLOAT, gl.FALSE, size_of(Vertex), offset_of(Vertex, data))
+		gl.EnableVertexAttribArray(5)
 
 		// element buffer
 		gl.BindBuffer(gl.ELEMENT_ARRAY_BUFFER, s.batch.ebo)
@@ -1246,7 +1284,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 
 // Appending vertices from draw call.
 // Additionally flushing the batch renderer if necessary.
-@private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32) {
+@private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32, shape_type: i32 = SHAPE_TYPE_RECT, shape_data: [4]f32 = {}) {
 	if s.batch.last_texture_id != texture.id {
 		_draw_next_batch(s.batch.last_texture_id)
 		s.batch.last_texture_id = texture.id
@@ -1260,10 +1298,10 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	}
 
 	append(&s.batch.vertices, 
-		Vertex{{dest.x, dest.y},{uv.x,uv.y}, tint, layer}, 
-		Vertex{{dest.x + dest.w, dest.y},{uv.x + uv.w, uv.y}, tint, layer},
-		Vertex{{dest.x + dest.w, dest.y + dest.h},{uv.x + uv.w, uv.y + uv.h}, tint, layer},
-		Vertex{{dest.x, dest.y + dest.h},{uv.x,uv.y + uv.h}, tint, layer},
+		Vertex{{dest.x, dest.y},{uv.x,uv.y}, tint, layer, shape_type, shape_data}, 
+		Vertex{{dest.x + dest.w, dest.y},{uv.x + uv.w, uv.y}, tint, layer, shape_type, shape_data},
+		Vertex{{dest.x + dest.w, dest.y + dest.h},{uv.x + uv.w, uv.y + uv.h}, tint, layer, shape_type, shape_data},
+		Vertex{{dest.x, dest.y + dest.h},{uv.x,uv.y + uv.h}, tint, layer, shape_type, shape_data},
 	)
 }
 

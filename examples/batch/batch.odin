@@ -51,6 +51,9 @@ main :: proc() {
         {
             vl.clear_color(vl.VALKYRIE_BLUE)
             vl.draw_rectangle({200, 40, 100, 100}, {1.0, 0.66, 0.2, 1.0})
+            vl.draw_rectangle_lines({200, 40, 100, 100}, vl.WHITE, 3)
+            vl.draw_circle({400, 300}, 32, vl.CYAN)
+            vl.draw_circle_lines({600, 300}, 32, vl.YELLOW, 3)
             vl.draw_texture_pos(mouse_texture, pos)
         }
         vl.render_end()
