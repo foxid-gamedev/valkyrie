@@ -38,11 +38,9 @@ package valkyrie
 import "core:mem"
 import "base:runtime"
 
-import "core:encoding/hex"
 import "core:os"
 import "core:log"
 import "core:fmt"
-import "core:slice"
 import "core:strings"
 import "core:math"
 import lin "core:math/linalg"
@@ -118,7 +116,6 @@ MouseButton :: enum {
 	Extra2  = glfw.MOUSE_BUTTON_7,
 	Extra3  = glfw.MOUSE_BUTTON_8,
 }
-
 
 Key :: enum int {
 	Space        = glfw.KEY_SPACE,
@@ -276,6 +273,10 @@ GamepadAxis :: enum int {
 	RightTrigger = glfw.GAMEPAD_AXIS_RIGHT_TRIGGER,
 }
 
+Alighnment        :: enum { Left, Center, Right }
+VerticalAlignment :: enum { Top, Center, Bottom }
+Wrap              :: enum { None, Word }
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -320,8 +321,8 @@ Texture :: struct {
 
 Font :: struct {
 	atlas: Texture,
-	pack: [dynamic]truetype.packedchar,
-	size: f32,
+	pack:  [dynamic]truetype.packedchar,
+	size:  f32,
 }
 
 Sound :: struct {
@@ -356,11 +357,14 @@ Camera :: struct {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Local Variables                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 @(private = "file") s: ^Val_State
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Main Functions                                                                                //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 // Creates the window and initializes Valkyrie.
 // Use this function to start your application.
@@ -461,8 +465,19 @@ draw_texture_part :: proc(texture: Texture, source, dest: Rect, tint: Color) {
 }
 
 // Draw text on the screen
-draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = WHITE, font := s.font) {
-	// Complex stuff I reall  don't understand but it seems to work
+draw_text :: proc(
+	text: string, 
+	position: Vec2, 
+	font_size: f32, 
+	color: Color = WHITE, 
+	alignment := Alighnment.Left,
+	vertical_alignment := VerticalAlignment.Top,
+	wrap := Wrap.None,
+	font := s.font,
+) {
+	// Complex stuff I reall don't understand but it seems to work
+	position := position
+
 	pixel_scale := font_size / font.size
 	ascent, descent, line_gap: i32
 	truetype.GetFontVMetrics(&s.font_info, &ascent, &descent, &line_gap)
@@ -471,6 +486,34 @@ draw_text :: proc(text: string, position: Vec2, font_size: f32, color: Color = W
 	truetype.GetCodepointBitmapBox(&s.font_info, 'H', scale, scale, &ix0, &iy0, &ix1, &iy1)
 	cap_height := f32(-iy0)
 	line_height := (cap_height + f32(-descent) + f32(line_gap)) * scale * 2
+	
+	// horizontal alignment
+	if alignment != .Left {
+		max_length: f32
+		lines := strings.split_lines(text, context.temp_allocator)
+
+		for line in lines {
+			max_length = max(max_length, measure_text(line, font_size))
+		}
+		
+		if alignment == .Center {
+			max_length *= 0.5
+		}
+
+		position.x -= max_length
+	}
+
+	// vertical alignment
+	if vertical_alignment != .Top {
+		line_count : int = strings.count(text, "\n") + 1
+		offset := line_height * f32(line_count) 
+
+		if vertical_alignment == .Center {
+			offset *= 0.5
+		}
+		position.y -= offset * pixel_scale
+	}
+
 	x := position.x / pixel_scale
 	y := position.y / pixel_scale + cap_height
 
@@ -885,6 +928,19 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 		f32(color.b) / 255.0,
 		f32(color.a) / 255.0,
 	}
+}
+
+// calculates horizontal text length with size and font type in pixel scale
+measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
+	scale := truetype.ScaleForPixelHeight(&s.font_info, font.size)
+	pixel_scale := font_size / font.size
+	width: f32
+	for r in text {
+		rune_width, bearing: i32
+		truetype.GetCodepointHMetrics(&s.font_info, r, &rune_width, &bearing)
+		width += f32(rune_width) * scale
+	}
+	return width * pixel_scale
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

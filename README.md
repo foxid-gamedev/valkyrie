@@ -76,8 +76,8 @@ main :: proc() {
 - [x] Batch rendering for textures and even fonts
 - [x] Simple 2D camera
 - [x] Keyboard input
-- [ ] Audio support (`.wav`, `.mp3`)
-- [ ] Font/UI text alignment
+- [x] Audio support (minimal)
+- [x] Font/UI text alignment
 - [ ] Font/UI word wrapping
 - [ ] Create a simple example game
 
