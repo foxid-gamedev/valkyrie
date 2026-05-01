@@ -2,6 +2,7 @@ package main
 
 import vl "../../valkyrie"
 import "core:log"
+import "core:fmt"
 
 main :: proc() {
    context.logger = log.create_console_logger()
@@ -22,7 +23,7 @@ main :: proc() {
       offset = {400, 300},
       zoom = 1,
    }
-   cam_spd: f32 = 100
+   cam_spd: f32 = 200
 
    vl.audio_listener_set_position(camera.position)
    vl.play_sound_2d(piano_music, piano_pos)
@@ -49,6 +50,7 @@ main :: proc() {
       vl.camera_end()
 
       vl.draw_fps({}, 32, vl.GRAY)
+      vl.draw_text(fmt.tprint("Pos:", piano_pos - camera.position), {0, 32}, 32)
       vl.render_end()
 
       free_all(context.temp_allocator)

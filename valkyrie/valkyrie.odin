@@ -275,7 +275,8 @@ GamepadAxis :: enum int {
 
 Alighnment        :: enum { Left, Center, Right }
 VerticalAlignment :: enum { Top, Center, Bottom }
-Wrap              :: enum { None, Word }
+
+AttenuationType :: enum { Inverse, Linear, Exponential }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
@@ -300,11 +301,15 @@ Val_State :: struct {
 	input_active_gamepad:        int,
 
 	audio : struct {
-		engine_config:      ma.engine_config,
-		engine:             ma.engine,
-		res_manager_config: ma.resource_manager_config,
-		res_manager:        ma.resource_manager,
-		initialized:        bool,
+		engine_config:        ma.engine_config,
+		engine:               ma.engine,
+		res_manager_config:   ma.resource_manager_config,
+		res_manager:          ma.resource_manager,
+		master: 				    AudioBus,
+		initialized:          bool,
+		spatial_min_distance: f32,
+		spatial_max_distance: f32,
+		attenuation: 			 AttenuationType,
 	},
 }
 
@@ -329,6 +334,12 @@ Sound :: struct {
 	handle: rawptr,
 	_alloc: mem.Allocator,
 }
+
+AudioBus :: struct {
+	handle: rawptr,
+	_alloc: mem.Allocator,
+}
+
 
 Vertex :: struct {
 	position: Vec2,
@@ -832,16 +843,28 @@ load_font :: proc(file: string, font_size: f32, atlas_size := 1024) -> (font: Fo
 	return font
 }
 
-load_sound :: proc(filename: string, allocator := context.allocator) -> (snd: Sound, ok: bool) {
+load_sound :: proc(
+	filename: string,
+	bus := s.audio.master,
+	volume: f32 = 1.0,
+	pitch: f32 = 1.0,
+	loop := false,
+	allocator := context.allocator,
+) -> (snd: Sound, ok: bool) {
 	assert(s.audio.initialized, "audio needs to be initialized with audio_init() before loading sound files")
 
 	snd.handle = new(ma.sound, allocator)
 	snd._alloc = allocator
-	result := ma.sound_init_from_file(&s.audio.engine, fmt.ctprint(filename), {}, nil, nil, cast(^ma.sound)(snd.handle))
+	result := ma.sound_init_from_file(&s.audio.engine, fmt.ctprint(filename), {}, _ma_group(bus), nil, cast(^ma.sound)(snd.handle))
 	if result != .SUCCESS {
 		free(snd.handle)
 		return {nil, {}}, false
 	}
+
+	sound_set_volume(snd, volume)
+	sound_set_pitch(snd, pitch)
+	sound_set_looping(snd, loop)
+
 	return snd, true
 }
 
@@ -917,6 +940,12 @@ audio_init :: proc() -> bool {
 		log.error("AUDIO::INIT::FAILED::ENGINE_INIT")
 		return false
 	}
+	master_ok: bool
+	s.audio.master, master_ok = audio_create_bus()
+	if ( !master_ok ) {
+		log.error("AUDIO::INIT::FAILED::CREATED_MASTER_BUS")
+		return false
+	}
 
 	s.audio.initialized = true
 	return true
@@ -924,9 +953,62 @@ audio_init :: proc() -> bool {
  
 audio_shutdown :: proc() {
 	assert(s.audio.initialized, "audio system has already been destroyed")
+	audio_destroy_bus(&s.audio.master)
 	ma.resource_manager_uninit(&s.audio.res_manager)
 	ma.engine_uninit(&s.audio.engine)
 	s.audio.initialized = false
+}
+
+
+audio_set_spatial_defaults :: proc (attenuation: AttenuationType, min_distance, max_distance: f32) {
+	s.audio.attenuation = attenuation
+	s.audio.spatial_min_distance = min_distance
+	s.audio.spatial_max_distance = max_distance
+}
+
+audio_create_bus :: proc(allocator := context.allocator) -> (bus: AudioBus, ok: bool) {
+	group := new(ma.sound_group, allocator)
+	result := ma.sound_group_init(&s.audio.engine, {}, nil, group)
+	if result != .SUCCESS {
+		free(group, allocator)
+		return {nil, {}}, false
+	}
+
+	bus = { rawptr(group), allocator }
+	audio_set_spatial_defaults(.Linear, 150, 800)
+
+	return bus, true
+}
+
+
+audio_destroy_bus :: proc(bus: ^AudioBus) -> bool {
+	assert(bus.handle != nil, "audio_destroy_bus failed, bus handle was nil")
+	ma.sound_group_uninit(_ma_group(bus^))
+	result := free(bus.handle, bus._alloc)	
+	return result == .None
+}
+
+audio_bus_set_volume :: proc(bus: AudioBus, volume: f32) {
+	ma.sound_group_set_volume(_ma_group(bus), volume)
+}
+
+audio_bus_volume :: proc(bus: AudioBus) -> f32 {
+	return ma.sound_group_get_volume(_ma_group(bus))
+}
+
+audio_bus_set_pitch :: proc(bus: AudioBus, pitch: f32) {
+	ma.sound_group_set_pitch(_ma_group(bus), pitch)
+}
+
+audio_bus_pitch :: proc(bus: AudioBus) -> f32 {
+	return ma.sound_group_get_pitch(_ma_group(bus))
+}
+
+audio_bus_master :: proc() -> AudioBus { return s.audio.master }
+
+
+audio_bus_fade :: proc(bus: AudioBus, to: f32, duration_ms: u64) {
+	ma.sound_group_set_fade_in_milliseconds(_ma_group(bus), audio_bus_volume(bus), to, duration_ms)
 }
 
 
@@ -937,24 +1019,62 @@ audio_listener_set_position :: proc(position: Vec2) {
 
 audio_listener_position :: proc() -> Vec2 {
 	lpos := ma.engine_listener_get_position(&s.audio.engine, 0)
-	return {lpos.x, lpos.y} * 1000
+	return {lpos.x, lpos.y}
 }
 
+sound_set_volume :: proc(sound: Sound, volume: f32) {
+	ma.sound_set_volume(_ma_sound(sound), volume)
+}
+
+sound_set_pitch :: proc(sound: Sound, pitch: f32) {
+	ma.sound_set_pitch(_ma_sound(sound), pitch)
+}
+
+sound_set_looping :: proc(sound: Sound, loop: bool) {
+	ma.sound_set_looping(_ma_sound(sound), b32(loop))
+}
+
+sound_volume :: proc(sound: Sound) -> f32 {
+	return ma.sound_get_volume(_ma_sound(sound))
+}
+
+sound_pitch :: proc(sound: Sound) -> f32 {
+	return ma.sound_get_pitch(_ma_sound(sound))
+}
+
+sound_is_looping :: proc(sound: Sound) -> bool {
+	return bool(ma.sound_is_looping(_ma_sound(sound)))
+}
 
 play_sound :: proc(sound: Sound) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
-	handle := cast(^ma.sound)sound.handle
+	handle := _ma_sound(sound)
 	result := ma.sound_start(handle)
 	assert(result == .SUCCESS, "starting sound failed")
 }
 
 play_sound_2d :: proc(sound: Sound , pos: Vec2 = {}) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
-	handle := cast(^ma.sound)sound.handle
+	handle := _ma_sound(sound)
 	lpos := pos * 0.001
 	ma.sound_set_position(handle, lpos.x, lpos.y, 0)
+
+	am : ma.attenuation_model
+	switch s.audio.attenuation {
+	case .Inverse: am = .inverse
+	case .Linear: am = .linear
+	case .Exponential: am = .exponential
+	}
+
+	ma.sound_set_attenuation_model(handle, am)
+	ma.sound_set_min_distance(handle, s.audio.spatial_min_distance * 0.001)
+	ma.sound_set_max_distance(handle, s.audio.spatial_max_distance * 0.001)
 	result := ma.sound_start(handle)
 	assert(result == .SUCCESS, "starting sound failed")
+}
+
+stop_sound :: proc(sound: Sound) {
+	ma.sound_stop(_ma_sound(sound))
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1003,7 +1123,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 // Initialize glfw and glfw errors.
-@(private="file") _init_glfw :: proc(width, height: int, title: string) {
+@private _init_glfw :: proc(width, height: int, title: string) {
 	// glfw error handling
 	error_callback :: proc "c" (error: i32, desc: cstring) {
 		context = runtime.default_context()
@@ -1028,7 +1148,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Loads OpenGL 3.3
-@(private="file") _load_open_gl :: proc() {
+@private _load_open_gl :: proc() {
 	set_proc_address :: proc(p: rawptr, name: cstring) {
 		(cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(name))
 	}
@@ -1036,7 +1156,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Creates the buffers for the default batch renderer
-@(private="file") _create_default_batch_buffers :: proc() {
+@private _create_default_batch_buffers :: proc() {
 	gl.GenVertexArrays(1, &s.batch.vao)
 	gl.GenBuffers(1, &s.batch.vbo)
 	gl.GenBuffers(1, &s.batch.ebo)
@@ -1082,7 +1202,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 
 // Generates a basic white texture rectangle 1x1.
 // Will be used for drawing simple colorized rectangles.
-@(private="file") _gen_basic_rect_texture :: proc() {
+@private _gen_basic_rect_texture :: proc() {
 	pixels := [4]u8{255, 255, 255, 255}
 	s.batch.basic_texture.width = 1
 	s.batch.basic_texture.height = 1
@@ -1097,7 +1217,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Updates the delta time 
-@(private="file") _update_frame_time :: proc() {
+@private _update_frame_time :: proc() {
 	current_time := glfw.GetTime()
 	delta := current_time - s.last_time
 	s.last_time = current_time
@@ -1106,7 +1226,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 
 // Appending vertices from draw call.
 // Additionally flushing the batch renderer if necessary.
-@(private="file") _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32) {
+@private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32) {
 	if s.batch.last_texture_id != texture.id {
 		_draw_next_batch(s.batch.last_texture_id)
 		s.batch.last_texture_id = texture.id
@@ -1129,7 +1249,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 
 // Rendering the current batch holding the vertex buffer
 // Will clear the vertex buffer when finished
-@(private="file") _draw_next_batch :: proc(texture_id: u32) {
+@private _draw_next_batch :: proc(texture_id: u32) {
 	if len(s.batch.vertices) ==  0 do return
 
 	// set texture
@@ -1159,12 +1279,12 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Get the orthogonal matrix of the current screen size
-@(private="file") _get_ortho_matrix :: proc() -> Mat4 {
+@private _get_ortho_matrix :: proc() -> Mat4 {
 	return lin.matrix_ortho3d_f32(0, f32(s.width), f32(s.height), 0, -1, 1)
 }
 
 // Updates all key states
-@(private="file") _update_key_states :: proc() {
+@private _update_key_states :: proc() {
 	for &key_state, key in s.input_key_states {
 		glfw_key_state := glfw.GetKey(s.window, i32(key))
 
@@ -1184,7 +1304,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Updates all gamepad states
-@(private="file") _update_gamepad_states :: proc() {
+@private _update_gamepad_states :: proc() {
 	ACTIVE_AXIS_THRESHOLD :: 0.66
 
 	for i in 0 ..< MAX_GAMEPADS {
@@ -1231,7 +1351,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Checks an input gamepad state to expected
-@(private="file") _gamepad_check_game_state :: #force_inline proc(button: GamepadButton, any_expected: []InputState, device := -1) -> bool {
+@private _gamepad_check_game_state :: #force_inline proc(button: GamepadButton, any_expected: []InputState, device := -1) -> bool {
 	assert(device >= -1 && device < MAX_GAMEPADS)
 	device := clamp(device, -1, MAX_GAMEPADS)
 
@@ -1251,7 +1371,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 }
 
 // Returns the gamepad input state from any device: 1-8
-_gamepad_get_game_state :: #force_inline proc(button: GamepadButton, device := -1) -> InputState {
+@private _gamepad_get_game_state :: #force_inline proc(button: GamepadButton, device := -1) -> InputState {
 	assert(device >= -1 && device < MAX_GAMEPADS)
 	device := clamp(device, -1, MAX_GAMEPADS)
 
@@ -1260,6 +1380,14 @@ _gamepad_get_game_state :: #force_inline proc(button: GamepadButton, device := -
 	} else {
 		return s.input_gamepad_button_states[device][button]
 	}
+}
+
+@private _ma_sound :: #force_inline proc(sound: Sound) -> ^ma.sound {
+	return cast(^ma.sound)sound.handle
+}
+
+@private _ma_group :: #force_inline proc(bus: AudioBus) -> ^ma.sound_group {
+	return cast(^ma.sound_group)bus.handle
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

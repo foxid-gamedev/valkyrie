@@ -79,8 +79,9 @@ main :: proc() {
 - [x] Audio support (minimal)
 - [x] Font/UI text alignment
 - [x] Font/UI word wrapping
-- [ ] Audio Volume + Spatial Sound Fade
-- [ ] Get/Set Mouse Position
+- [x] Audio Volume + Spatial Sound Fade
+- [x] Get/Set Mouse Position
+- [x] Audio Bus Mixer System
 - [ ] Draw Circle
 - [ ] Draw Circle Lines
 - [ ] Check Circle Collision
