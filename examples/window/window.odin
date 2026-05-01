@@ -27,6 +27,7 @@
 
 package main
 
+import "core:fmt"
 import vl "../../valkyrie"
 
 main :: proc() {
@@ -36,8 +37,12 @@ main :: proc() {
 
     for !vl.should_close() {
         vl.poll_events()
+
+        if vl.key_is_pressed(.Space) do vl.set_mouse_position({400, 300})
+        
         vl.render_begin()
-        vl.clear_color(vl.VALKYRIE_BLUE)
+            vl.clear_color(vl.VALKYRIE_BLUE)
+            vl.draw_text(fmt.tprint("Cursor Pos:", vl.mouse_position()), {}, 32)
         vl.render_end()
         free_all(context.temp_allocator)
     }

@@ -624,16 +624,18 @@ draw_fps :: proc(position: Vec2, font_size: f32, color: Color = WHITE) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-close_window    :: proc() { glfw.SetWindowShouldClose(s.window, true) } // Close the game window
-clear_color     :: proc(color: Color) { gl.ClearColor(color.r, color.g, color.b, color.a) } // Clear the background with a color
-bind_shader     :: proc(s: Shader) { gl.UseProgram(s) } // Bind/use a shader
-delta_time      :: proc() -> f32 { return s.delta_time } // Receive delta time (used for frame time based movement)
-window_width    :: proc() -> int { return s.width } // Get window width
-window_height   :: proc() -> int { return s.height } // Get window height
-window_title    :: proc() -> string { return s.title } // Get window title
-set_vsync       :: proc(vsync: bool) { s.vsync = vsync; if vsync do glfw.SwapInterval(1); else do glfw.SwapInterval(0) } // Enable/Disable vertical sync (monitor)
-vsync			    :: proc() -> bool { return s.vsync } // Get vsync flag
-set_window_size :: proc(size: Vec2) { s.width = int(size.x); s.height = int(size.y); glfw.SetWindowSize(s.window, i32(s.width), i32(s.height)); } // Update/Change the window size
+close_window       :: proc() { glfw.SetWindowShouldClose(s.window, true) } // Close the game window
+clear_color        :: proc(color: Color) { gl.ClearColor(color.r, color.g, color.b, color.a) } // Clear the background with a color
+bind_shader        :: proc(s: Shader) { gl.UseProgram(s) } // Bind/use a shader
+delta_time         :: proc() -> f32 { return s.delta_time } // Receive delta time (used for frame time based movement)
+window_width       :: proc() -> int { return s.width } // Get window width
+window_height      :: proc() -> int { return s.height } // Get window height
+window_title       :: proc() -> string { return s.title } // Get window title
+set_vsync          :: proc(vsync: bool) { s.vsync = vsync; if vsync do glfw.SwapInterval(1); else do glfw.SwapInterval(0) } // Enable/Disable vertical sync (monitor)
+vsync			       :: proc() -> bool { return s.vsync } // Get vsync flag
+set_window_size    :: proc(size: Vec2) { s.width = int(size.x); s.height = int(size.y); glfw.SetWindowSize(s.window, i32(s.width), i32(s.height)); } // Update/Change the window size
+set_mouse_position :: proc(pos: Vec2) {glfw.SetCursorPos(s.window, f64(int(pos.x)), f64(int(pos.y))) } 
+mouse_position     :: proc() -> Vec2 { x, y := glfw.GetCursorPos(s.window); return {f32(int(x)), f32(int(y))} }
 
 set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {
 	// TODO: make different set uniform functions
@@ -646,6 +648,7 @@ set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {
 		raw_data(&value[0]),
 	)
 } 
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Loading Assets/Files                                                                          //
