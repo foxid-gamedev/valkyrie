@@ -78,7 +78,13 @@ main :: proc() {
 - [x] Keyboard input
 - [x] Audio support (minimal)
 - [x] Font/UI text alignment
-- [ ] Font/UI word wrapping
+- [x] Font/UI word wrapping
+- [ ] Audio Volume + Spatial Sound Fade
+- [ ] Get/Set Mouse Position
+- [ ] Draw Circle
+- [ ] Draw Circle Lines
+- [ ] Check Circle Collision
+- [ ] Check Rectangle Collision (AABB)
 - [ ] Create a simple example game
 
 ---

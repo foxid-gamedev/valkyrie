@@ -448,6 +448,18 @@ draw_rectangle :: proc(dest: Rect, tint: Color) {
 	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0)
 }
 
+// Draw s simple unfilled rectangle 
+draw_rectangle_lines :: proc(dest: Rect, tint: Color, thickness: f32 = 1) {
+	assert(thickness > 0, "drawing thickness shouldn't be <= 0")
+	tn := max(0.01, thickness)
+	hf := tn * 0.5
+	// line order: top -> right -> bottom -> left
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, dest.w + hf, tn}, tint, 0)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x + dest.w - hf, dest.y - hf, tn, dest.h + hf}, tint, 0)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y + dest.h - hf, dest.w + hf, tn}, tint, 0)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, tn, dest.h + hf}, tint, 0)
+} 
+
 // Draw a texture at position
 draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, scale: Vec2 = {1,1}, tint: Color = WHITE) {
 	_render_object(
@@ -472,7 +484,6 @@ draw_text :: proc(
 	color: Color = WHITE, 
 	alignment := Alighnment.Left,
 	vertical_alignment := VerticalAlignment.Top,
-	wrap := Wrap.None,
 	font := s.font,
 ) {
 	// Complex stuff I reall don't understand but it seems to work
@@ -559,6 +570,47 @@ draw_text :: proc(
 
 		_render_object(font.atlas, source, dest, color, 0)
 	}
+}
+
+// draw text word wrapping inside a text
+draw_text_wrapped :: proc(
+	text: string, 
+	rect: Rect,
+	font_size: f32,
+	color: Color = WHITE,
+	alignment := Alighnment.Left,
+	vertical_alignment := VerticalAlignment.Top,
+	font := s.font,
+) {
+	space_width := measure_text(" ", font_size, font)
+	builder := strings.builder_make(context.temp_allocator)
+	lines := strings.split_lines(text, context.temp_allocator)
+	
+	loop: for line, l in lines {
+		if l > 0 {
+			strings.write_byte(&builder, '\n')
+		}
+		words := strings.split(line, " ", context.temp_allocator)
+		current_width: f32
+		current_height: f32
+
+		for word, w in words {
+			word_width := measure_text(word, font_size, font)
+			if w == 0 {
+				strings.write_string(&builder, word)
+				current_width = word_width
+			} else if current_width + space_width + word_width <= rect.w {
+				strings.write_byte(&builder, ' ')
+				strings.write_string(&builder, word)
+				current_width += space_width + word_width
+			} else {
+				strings.write_byte(&builder, '\n')
+				strings.write_string(&builder, word)
+				current_width = word_width
+			}
+		}
+	}
+	draw_text(strings.to_string(builder), {rect.x, rect.y}, font_size, color, alignment, vertical_alignment, font)
 }
 
 // Draw fps (frames per second) on the screen

@@ -58,6 +58,12 @@ defer vl.shutdown()
       vl.draw_text("Right-Center\nRight-Center 2", {800, 300}, 32, vl.WHITE, .Right, .Center)
       vl.draw_text("Right-Bottom\nRight-Bottom, 2", {800, 600}, 32, vl.WHITE, .Right, .Bottom)
 
+      text_rect := vl.Rect{ 64, 64, 400-128, 300-128}
+      text := "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua."
+
+      vl.draw_rectangle_lines(text_rect, vl.GRAY, 1)
+      vl.draw_text_wrapped(text, text_rect, 32)
+
       vl.render_end()
       free_all(context.temp_allocator)
    }
