@@ -33,10 +33,11 @@ import vl "../../valkyrie"
 main :: proc() {
     context.logger = log.create_console_logger()
 
-    vl.create_window(800, 600, "My Window")
+    vl.create_window(800, 600, "Batch renderer")
     defer vl.shutdown()
 
     vl.set_vsync(true)
+    vl.hide_cursor()
 
     pos: vl.Vec2 
 

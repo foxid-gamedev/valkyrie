@@ -435,6 +435,7 @@ create_window :: proc(width, height: int, title: string) {
 	// Enable alpha blending
 	gl.Enable(gl.BLEND)
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 }
 
 // Destroys the window and frees all internal memory. Call via defer right after create_window().
@@ -735,6 +736,8 @@ vsync			       :: proc() -> bool { return s.vsync } // Get vsync flag
 set_window_size    :: proc(size: Vec2) { s.width = int(size.x); s.height = int(size.y); glfw.SetWindowSize(s.window, i32(s.width), i32(s.height)); } // Update/Change the window size
 set_mouse_position :: proc(pos: Vec2) {glfw.SetCursorPos(s.window, f64(int(pos.x)), f64(int(pos.y))) } // Moves the mouse cursor to a position in screen coordinates
 mouse_position     :: proc() -> Vec2 { x, y := glfw.GetCursorPos(s.window); return {f32(int(x)), f32(int(y))} } // Returns the current mouse cursor position in screen coordinates
+show_cursor        :: proc() { glfw.SetInputMode(s.window, glfw.CURSOR, glfw.CURSOR_NORMAL) } // Show mouse cursor
+hide_cursor        :: proc() { glfw.SetInputMode(s.window, glfw.CURSOR, glfw.CURSOR_HIDDEN) } // Hide mouse cursor 
 
 // Uploads a Mat4 uniform to a shader by name. The shader must be bound with bind_shader() first.
 set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {

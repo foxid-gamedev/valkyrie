@@ -47,7 +47,7 @@ main :: proc() {
 	vl.create_window(800, 600, "Collision")
 	defer vl.shutdown()
 	vl.set_vsync(true)
-
+	vl.hide_cursor()
 	t: f32
 
 	for !vl.should_close() {
