@@ -82,10 +82,10 @@ main :: proc() {
 - [x] Audio Volume + Spatial Sound Fade
 - [x] Get/Set Mouse Position
 - [x] Audio Bus Mixer System
-- [ ] Draw Circle
-- [ ] Draw Circle Lines
-- [ ] Check Circle Collision
-- [ ] Check Rectangle Collision (AABB)
+- [x] Draw Circle
+- [x] Draw Circle Lines
+- [x] Check Circle Collision
+- [x] Check Rectangle Collision (AABB)
 - [ ] Create a simple example game
 
 ---
@@ -94,10 +94,11 @@ main :: proc() {
 
 Valkyrie currently depends on libraries from Odin's vendor collection:
 
-- GLFW
-- OpenGL 3.3 Core
-- `stb_image`
-- `stb_truetype`
+- `GLFW`: Window management
+- `OpenGL`: Rendering api
+- `stb_image`: Loading textures
+- `stb_truetype`: Loading & generating fonts
+- `miniaudio`: Loading & playing sounds
 
 ## Troubleshooting
 
@@ -109,4 +110,6 @@ In many cases, it is enough to install Odin correctly and make sure its path is 
 
 ### Valkyrie does not run as expected
 
-Run the project in debug mode and check whether any assets or shaders are missing.
+1. Import logging with: `import "core:log"` in your main file
+2. Activate console logging inside your main function: `context.logger = log.create_console_logger()`
+3. Run your code in debug mode: `odin run ./<project-path> -debug` and check whether any assets or shaders aren't loading.

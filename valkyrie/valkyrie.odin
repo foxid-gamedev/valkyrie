@@ -1181,6 +1181,43 @@ stop_sound :: proc(sound: Sound) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
+// Collision Functions                                                                           //
+///////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+check_collision_rects :: proc(rect_a, rect_b: Rect) -> bool {
+	w := ((rect_a.x + rect_a.w) >= rect_b.x) && (rect_a.x <= (rect_b.x + rect_b.w))
+	h := ((rect_a.y + rect_a.h) >= rect_b.y) && (rect_a.y <= (rect_b.y + rect_b.h))
+	return w && h
+}
+
+check_collision_point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
+	w := (point.x >= rect.x) && (point.x <= rect.x + rect.w)
+	h := (point.y >= rect.y) && (point.y <= rect.y + rect.h)
+	return w && h
+}
+
+check_collision_circles :: proc(circle_a_pos: Vec2, circle_a_radius: f32, circle_b_pos: Vec2, circle_b_radius: f32) -> bool {
+	dist       := circle_b_pos - circle_a_pos
+	sum_radius := circle_a_radius + circle_b_radius
+	return (dist.x * dist.x) + (dist.y * dist.y) <= (sum_radius * sum_radius)
+}
+
+check_collision_point_in_circle :: proc(point: Vec2, circle_pos: Vec2, circle_radius: f32) -> bool {
+	dist := point - circle_pos
+	return  (dist.x * dist.x) + (dist.y * dist.y) <= (circle_radius * circle_radius)
+}
+
+check_collision_circle_rect :: proc(circle_pos: Vec2, circle_radius: f32, rect: Rect) -> bool {
+	nearest := Vec2{
+		clamp(circle_pos.x, rect.x, rect.x + rect.w),
+		clamp(circle_pos.y, rect.y, rect.y + rect.h),
+	}
+	dist := circle_pos - nearest
+	return (dist.x * dist.x) + (dist.y * dist.y) <= (circle_radius * circle_radius)
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////////////
 // Util/Math (Helper) Functions                                                                  //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
