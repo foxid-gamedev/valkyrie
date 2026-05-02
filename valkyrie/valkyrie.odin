@@ -29,7 +29,9 @@
 // TODO:                                                                                         //
 //                                                                                               //
 // - Enhance performance input states                                                            //
-//                                                                                               //
+// - Add uniform locations                                                                       //
+// - Add more uniform functions                                                                  //
+// - Use persistent camera matrix (efficiency)                                                   //
 //                                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -435,8 +437,7 @@ create_window :: proc(width, height: int, title: string) {
 	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 }
 
-// Destroys the window and frees the memory.
-// Use this function to quit your application sucessfully.
+// Destroys the window and frees all internal memory. Call via defer right after create_window().
 shutdown :: proc() {
 	glfw.DestroyWindow(s.window)
 	glfw.Terminate()
@@ -453,23 +454,19 @@ poll_events :: proc() {
 	_update_frame_time()
 }
 
-// Checks if the window is going to close.
-// Used as game loop condition inside:
-//
-// `for !should_close() `
+// Returns true when the window has been requested to close.
+// Typical usage: for !vl.should_close() { ... }
 should_close :: proc() -> bool {
 	return bool(glfw.WindowShouldClose(s.window))
 }
 
-// Render begin function: Make sure to use this before drawing something.
-// Needs to be closed by render_end() when finished drawing.
+// Clears the screen and starts a new frame. Must be paired with render_end().
 render_begin :: proc() {
 	gl.Viewport(0, 0, i32(s.width), i32(s.height))
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 }
 
-// Draws the final batch 
-// and presents the rendering on screen (swapping buffers).
+// Flushes the draw batch and presents the frame on screen (buffer swap). Pair with render_begin().
 render_end :: proc() {
 	_draw_next_batch(s.batch.last_texture_id)
 	glfw.SwapBuffers(s.window)
@@ -477,6 +474,8 @@ render_end :: proc() {
 
 
 
+// Applies a camera transform (position, zoom, rotation, offset) to all subsequent draw calls.
+// Must be closed with camera_end(). Flushes the current batch before applying the new transform.
 camera_begin :: proc(camera: Camera) {
 	cam_matrix :=
 		lin.matrix4_translate_f32({camera.offset.x, camera.offset.y, 0}) *
@@ -486,6 +485,7 @@ camera_begin :: proc(camera: Camera) {
 	s.projection_view = _get_ortho_matrix() * cam_matrix
 }
 
+// Restores the default screen-space projection after camera_begin().
 camera_end :: proc() {
 	_draw_next_batch(s.batch.last_texture_id)
 	s.projection_view = _get_ortho_matrix()
@@ -495,12 +495,12 @@ camera_end :: proc() {
 // Drawing Functions                                                                             //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Draw a simple colorized rectangle shape on the screen
+// Draws a filled rectangle. dest = {x, y, width, height}.
 draw_rectangle :: proc(dest: Rect, tint: Color) {
 	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0)
 }
 
-// Draw a simple unfilled rectangle
+// Draws an unfilled rectangle outline. thickness is centered on the rect edge (default: 1px).
 draw_rectangle_lines :: proc(dest: Rect, tint: Color, thickness: f32 = 1) {
 	assert(thickness > 0, "drawing thickness shouldn't be <= 0")
 	hf := max(0.01, thickness) * 0.5
@@ -510,6 +510,7 @@ draw_rectangle_lines :: proc(dest: Rect, tint: Color, thickness: f32 = 1) {
 	_render_object(s.batch.basic_texture, {0,0,1,1}, expanded, tint, 0, SHAPE_TYPE_SDF, {hw, hh, 0, hf})
 }
 
+// Draws a filled rectangle with rounded corners. roundness: 0 = sharp, 1 = fully rounded.
 draw_rectangle_rounded :: proc(dest: Rect, tint: Color, roundness: f32) {
 	hw := dest.w * 0.5
 	hh := dest.h * 0.5
@@ -517,6 +518,7 @@ draw_rectangle_rounded :: proc(dest: Rect, tint: Color, roundness: f32) {
 	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0, SHAPE_TYPE_SDF, {hw, hh, r, 0})
 }
 
+// Draws an unfilled rectangle outline with rounded corners. roundness: 0 = sharp, 1 = fully rounded.
 draw_rectangle_lines_rounded :: proc(dest: Rect, tint: Color, roundness: f32, thickness: f32 = 1) {
 	assert(thickness > 0, "drawing thickness shouldn't be <= 0")
 	hf := max(0.01, thickness) * 0.5
@@ -527,6 +529,7 @@ draw_rectangle_lines_rounded :: proc(dest: Rect, tint: Color, roundness: f32, th
 	_render_object(s.batch.basic_texture, {0,0,1,1}, expanded, tint, 0, SHAPE_TYPE_SDF, {hw, hh, r, hf})
 }
 
+// Draws a filled circle at the given center position.
 draw_circle :: proc(position: Vec2, radius: f32, tint: Color) {
 	_render_object(
 		s.batch.basic_texture,
@@ -539,6 +542,7 @@ draw_circle :: proc(position: Vec2, radius: f32, tint: Color) {
 	)
 }
 
+// Draws a circle outline. thickness is centered on the circle edge (default: 1px).
 draw_circle_lines :: proc(position: Vec2, radius: f32, tint: Color, thickness: f32 = 1) {
 	hf      := max(0.01, thickness) * 0.5
 	outer_r := radius + hf
@@ -554,7 +558,7 @@ draw_circle_lines :: proc(position: Vec2, radius: f32, tint: Color, thickness: f
 }
 
 
-// Draw a texture at position
+// Draws a texture at position. origin shifts the anchor point (default: top-left). scale and tint are optional.
 draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, scale: Vec2 = {1,1}, tint: Color = WHITE) {
 	_render_object(
 		texture, 
@@ -565,12 +569,13 @@ draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, sc
 	)
 }
 
-// Draw only a section from a texture on the screen
+// Draws a sub-region of a texture. source = pixel rect in the texture, dest = screen rect.
 draw_texture_part :: proc(texture: Texture, source, dest: Rect, tint: Color) {
 	_render_object(texture, source, dest, tint, 0)
 }
 
-// Draw text on the screen
+// Draws text at position with the given font size. Supports horizontal and vertical alignment.
+// Alignment is relative to position: .Left = position is the left edge, .Center = centered on position, etc.
 draw_text :: proc(
 	text: string, 
 	position: Vec2, 
@@ -666,7 +671,7 @@ draw_text :: proc(
 	}
 }
 
-// draw text word wrapping inside a text
+// Draws text word-wrapped to fit inside rect. Long lines break automatically at word boundaries.
 draw_text_wrapped :: proc(
 	text: string, 
 	rect: Rect,
@@ -728,9 +733,10 @@ window_title       :: proc() -> string { return s.title } // Get window title
 set_vsync          :: proc(vsync: bool) { s.vsync = vsync; if vsync do glfw.SwapInterval(1); else do glfw.SwapInterval(0) } // Enable/Disable vertical sync (monitor)
 vsync			       :: proc() -> bool { return s.vsync } // Get vsync flag
 set_window_size    :: proc(size: Vec2) { s.width = int(size.x); s.height = int(size.y); glfw.SetWindowSize(s.window, i32(s.width), i32(s.height)); } // Update/Change the window size
-set_mouse_position :: proc(pos: Vec2) {glfw.SetCursorPos(s.window, f64(int(pos.x)), f64(int(pos.y))) } 
-mouse_position     :: proc() -> Vec2 { x, y := glfw.GetCursorPos(s.window); return {f32(int(x)), f32(int(y))} }
+set_mouse_position :: proc(pos: Vec2) {glfw.SetCursorPos(s.window, f64(int(pos.x)), f64(int(pos.y))) } // Moves the mouse cursor to a position in screen coordinates
+mouse_position     :: proc() -> Vec2 { x, y := glfw.GetCursorPos(s.window); return {f32(int(x)), f32(int(y))} } // Returns the current mouse cursor position in screen coordinates
 
+// Uploads a Mat4 uniform to a shader by name. The shader must be bound with bind_shader() first.
 set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {
 	// TODO: make different set uniform functions
 	// TODO: Load uniform locations once 
@@ -749,7 +755,8 @@ set_uniform_mat4 :: proc(shader: Shader, location: string, value: ^Mat4) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// loading a shader from file (GLSL, OpenGL3.3, Core)
+// Loads and compiles a GLSL shader from vertex and fragment source files (OpenGL 3.3 Core).
+// Returns the shader handle and false if compilation or linking fails.
 load_shader :: proc(vertex_filename, fragment_filename: string) -> (Shader, bool) {
 	vertex_file, vertex_file_ok := os.read_entire_file(vertex_filename, context.temp_allocator)
 	load_ok: bool = true
@@ -837,7 +844,7 @@ load_shader :: proc(vertex_filename, fragment_filename: string) -> (Shader, bool
 	return shader, load_ok
 }
 
-// Loading a texture form file (.png)
+// Loads a texture from file (.png, .jpg, etc.) into GPU memory. Returns a zero Texture on failure.
 load_texture :: proc(file: string) -> (tex: Texture) {
 	gl.GenTextures(1, &tex.id)
 	gl.BindTexture(gl.TEXTURE_2D, tex.id)
@@ -871,7 +878,8 @@ load_texture :: proc(file: string) -> (tex: Texture) {
 	return tex
 }
 
-// loading a font from file (.ttf)
+// Loads a TrueType font and bakes it into a GPU texture atlas at the given size.
+// atlas_size controls the atlas resolution — increase it for large font sizes or many glyphs.
 load_font :: proc(file: string, font_size: f32, atlas_size := 1024) -> (font: Font) {
 	FONT_FIRST_UNICODE_IN_RANGE :: 32
 	FONT_UNICODE_RANGE :: 95
@@ -926,6 +934,8 @@ load_font :: proc(file: string, font_size: f32, atlas_size := 1024) -> (font: Fo
 	return font
 }
 
+// Loads a sound from file (.wav, .mp3, .ogg). Optionally assigns it to a bus and sets initial volume, pitch and looping.
+// audio_init() must be called before loading sounds. Returns the sound handle and false on failure.
 load_sound :: proc(
 	filename: string,
 	bus := s.audio.master,
@@ -951,6 +961,7 @@ load_sound :: proc(
 	return snd, true
 }
 
+// Frees a sound's resources. The sound handle becomes invalid after this call.
 unload_sound :: proc(sound: ^Sound) -> bool {
 	assert(sound.handle != nil, "free_sound failed, sound handle was nil")
 	result := free(sound.handle, sound._alloc)
@@ -1002,6 +1013,7 @@ input_vector_f32  :: proc(left, right, up, down: f32)  -> Vec2 { return { right 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+// Initializes the audio engine and creates the master bus. 
 audio_init :: proc() -> bool {
 	assert(!s.audio.initialized, "audio system has already been initialized")
 
@@ -1034,6 +1046,7 @@ audio_init :: proc() -> bool {
 	return true
 }
  
+// Shuts down the audio engine and releases all audio resources.
 audio_shutdown :: proc() {
 	assert(s.audio.initialized, "audio system has already been destroyed")
 	audio_destroy_bus(&s.audio.master)
@@ -1043,12 +1056,16 @@ audio_shutdown :: proc() {
 }
 
 
+// Sets the default attenuation model and distance range used by play_sound_2d().
+// min_distance: full volume up to here. max_distance: silent beyond this. Distances in screen units.
 audio_set_spatial_defaults :: proc (attenuation: AttenuationType, min_distance, max_distance: f32) {
 	s.audio.attenuation = attenuation
 	s.audio.spatial_min_distance = min_distance
 	s.audio.spatial_max_distance = max_distance
 }
 
+// Creates an audio bus for grouping sounds (e.g. separate music and sfx buses).
+// Assign sounds to it via the bus parameter in load_sound(). Returns false on failure.
 audio_create_bus :: proc(allocator := context.allocator) -> (bus: AudioBus, ok: bool) {
 	group := new(ma.sound_group, allocator)
 	result := ma.sound_group_init(&s.audio.engine, {}, nil, group)
@@ -1064,6 +1081,7 @@ audio_create_bus :: proc(allocator := context.allocator) -> (bus: AudioBus, ok: 
 }
 
 
+// Destroys an audio bus and frees its memory. All sounds assigned to it stop playing.
 audio_destroy_bus :: proc(bus: ^AudioBus) -> bool {
 	assert(bus.handle != nil, "audio_destroy_bus failed, bus handle was nil")
 	ma.sound_group_uninit(_ma_group(bus^))
@@ -1071,64 +1089,80 @@ audio_destroy_bus :: proc(bus: ^AudioBus) -> bool {
 	return result == .None
 }
 
+// Sets the volume of all sounds on this bus. 0 = silent, 1 = full volume.
 audio_bus_set_volume :: proc(bus: AudioBus, volume: f32) {
 	ma.sound_group_set_volume(_ma_group(bus), volume)
 }
 
+// Returns the current volume of this bus (0..1+).
 audio_bus_volume :: proc(bus: AudioBus) -> f32 {
 	return ma.sound_group_get_volume(_ma_group(bus))
 }
 
+// Sets the pitch multiplier of all sounds on this bus. 1 = normal speed, 2 = double speed.
 audio_bus_set_pitch :: proc(bus: AudioBus, pitch: f32) {
 	ma.sound_group_set_pitch(_ma_group(bus), pitch)
 }
 
+// Returns the current pitch multiplier of this bus.
 audio_bus_pitch :: proc(bus: AudioBus) -> f32 {
 	return ma.sound_group_get_pitch(_ma_group(bus))
 }
 
+// Returns the master bus. All sounds route through it unless assigned to a different bus.
 audio_bus_master :: proc() -> AudioBus { return s.audio.master }
 
 
+// Smoothly fades the bus volume from its current level to 'to' over duration_ms milliseconds.
 audio_bus_fade :: proc(bus: AudioBus, to: f32, duration_ms: u64) {
 	ma.sound_group_set_fade_in_milliseconds(_ma_group(bus), audio_bus_volume(bus), to, duration_ms)
 }
 
 
+// Sets the listener position for spatial audio (typically the camera or player position).
+// Determines the reference point from which 2D sound distances are calculated.
 audio_listener_set_position :: proc(position: Vec2) {
 	lpos := position * 0.001
 	ma.engine_listener_set_position(&s.audio.engine, 0, lpos.x, lpos.y, 0)
 }
 
+// Returns the current listener position.
 audio_listener_position :: proc() -> Vec2 {
 	lpos := ma.engine_listener_get_position(&s.audio.engine, 0)
 	return {lpos.x, lpos.y}
 }
 
+// Sets the playback volume of a sound. 0 = silent, 1 = full volume.
 sound_set_volume :: proc(sound: Sound, volume: f32) {
 	ma.sound_set_volume(_ma_sound(sound), volume)
 }
 
+// Sets the pitch multiplier of a sound. 1 = normal speed, 0.5 = half speed, 2 = double speed.
 sound_set_pitch :: proc(sound: Sound, pitch: f32) {
 	ma.sound_set_pitch(_ma_sound(sound), pitch)
 }
 
+// Sets whether the sound restarts automatically when it reaches the end.
 sound_set_looping :: proc(sound: Sound, loop: bool) {
 	ma.sound_set_looping(_ma_sound(sound), b32(loop))
 }
 
+// Returns the current volume of a sound (0..1+).
 sound_volume :: proc(sound: Sound) -> f32 {
 	return ma.sound_get_volume(_ma_sound(sound))
 }
 
+// Returns the current pitch multiplier of a sound.
 sound_pitch :: proc(sound: Sound) -> f32 {
 	return ma.sound_get_pitch(_ma_sound(sound))
 }
 
+// Returns true if the sound is set to loop.
 sound_is_looping :: proc(sound: Sound) -> bool {
 	return bool(ma.sound_is_looping(_ma_sound(sound)))
 }
 
+// Plays a sound without any spatial positioning (non-directional, full volume).
 play_sound :: proc(sound: Sound) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
 	handle := _ma_sound(sound)
@@ -1136,6 +1170,8 @@ play_sound :: proc(sound: Sound) {
 	assert(result == .SUCCESS, "starting sound failed")
 }
 
+// Plays a sound at a 2D world position. Volume attenuates with distance from the listener.
+// Uses the default range set with audio_set_spatial_defaults().
 play_sound_2d :: proc(sound: Sound , pos: Vec2) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
 	handle := _ma_sound(sound)
@@ -1156,6 +1192,8 @@ play_sound_2d :: proc(sound: Sound , pos: Vec2) {
 	assert(result == .SUCCESS, "starting 2d sound failed")
 }
 
+// Plays a 2D positional sound with explicit distance range and attenuation model.
+// min_distance: full volume up to here. max_distance: silent beyond this.
 play_sound_2d_range :: proc(sound: Sound, pos: Vec2, min_distance: f32, max_distance: f32, attenuation := AttenuationType.Linear) {
 	assert(s.audio.initialized, "audio system needs to be initialized with audio_init() before playing any sound")
 	handle := _ma_sound(sound)
@@ -1176,6 +1214,7 @@ play_sound_2d_range :: proc(sound: Sound, pos: Vec2, min_distance: f32, max_dist
 	assert(result == .SUCCESS, "starting 2d ranged sound failed")
 }
 
+// Stops a currently playing sound. Call play_sound() again to restart it.
 stop_sound :: proc(sound: Sound) {
 	ma.sound_stop(_ma_sound(sound))
 }
@@ -1185,29 +1224,34 @@ stop_sound :: proc(sound: Sound) {
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
+// Returns true if two axis-aligned rectangles overlap (AABB test).
 check_collision_rects :: proc(rect_a, rect_b: Rect) -> bool {
 	w := ((rect_a.x + rect_a.w) >= rect_b.x) && (rect_a.x <= (rect_b.x + rect_b.w))
 	h := ((rect_a.y + rect_a.h) >= rect_b.y) && (rect_a.y <= (rect_b.y + rect_b.h))
 	return w && h
 }
 
+// Returns true if a point lies inside a rectangle (inclusive edges).
 check_collision_point_in_rect :: proc(point: Vec2, rect: Rect) -> bool {
 	w := (point.x >= rect.x) && (point.x <= rect.x + rect.w)
 	h := (point.y >= rect.y) && (point.y <= rect.y + rect.h)
 	return w && h
 }
 
+// Returns true if two circles overlap. Uses squared distance to avoid sqrt.
 check_collision_circles :: proc(circle_a_pos: Vec2, circle_a_radius: f32, circle_b_pos: Vec2, circle_b_radius: f32) -> bool {
 	dist       := circle_b_pos - circle_a_pos
 	sum_radius := circle_a_radius + circle_b_radius
 	return (dist.x * dist.x) + (dist.y * dist.y) <= (sum_radius * sum_radius)
 }
 
+// Returns true if a point lies inside a circle (inclusive edges).
 check_collision_point_in_circle :: proc(point: Vec2, circle_pos: Vec2, circle_radius: f32) -> bool {
 	dist := point - circle_pos
 	return  (dist.x * dist.x) + (dist.y * dist.y) <= (circle_radius * circle_radius)
 }
 
+// Returns true if a circle overlap a rectangle. Used squared distance to avoid sqrt.
 check_collision_circle_rect :: proc(circle_pos: Vec2, circle_radius: f32, rect: Rect) -> bool {
 	nearest := Vec2{
 		clamp(circle_pos.x, rect.x, rect.x + rect.w),
@@ -1222,10 +1266,8 @@ check_collision_circle_rect :: proc(circle_pos: Vec2, circle_radius: f32, rect: 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 
-// Converting/Snapping a normalized color (f32) to color (bytes/u8)
-// 
-// Warning: In case you ease/lerp your color with delta, avoid the use of byte-colors entirely!
-// Otherwise you will lose every frame some delta precicion of any fraction smaller than 1/256
+// Converts a normalized float color (0..1) to a byte color (0..255).
+// Warning: avoid for lerped/eased values — precision below 1/256 is lost on every frame.
 as_color_u8 :: proc(color: Color) -> [4]byte {
 	return {
 		byte(math.round(color.r * 255.0)),
@@ -1235,7 +1277,7 @@ as_color_u8 :: proc(color: Color) -> [4]byte {
 	}
 }
 
-// Converting a color (bytes/u8) to a normalized color (f32)
+// Converts a byte color (0..255) to a normalized float color (0..1).
 as_color_f32 :: proc(color: [4]byte) -> Color {
 	return {
 		f32(color.r) / 255.0,
@@ -1245,7 +1287,7 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 	}
 }
 
-// Fade a color by an alpha value: (= Color.a * alpha)
+// Returns the color with its alpha multiplied by the given factor. Useful for transparency effects.
 fade_color :: proc(color: Color, alpha: f32) -> Color {
 	return {
 		color.r,
@@ -1256,7 +1298,7 @@ fade_color :: proc(color: Color, alpha: f32) -> Color {
 }
 
 
-// calculates horizontal text length with size and font type in pixel scale
+// Returns the rendered pixel width of a text string at the given font size. Useful for manual layout and centering.
 measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	scale := truetype.ScaleForPixelHeight(&s.font_info, font.size)
 	pixel_scale := font_size / font.size
@@ -1273,7 +1315,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 // Local Functions                                                                               //
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
-// Initialize glfw and glfw errors.
+// Creates the window, sets up an OpenGL 3.3 Core context and registers the GLFW error callback.
 @private _init_glfw :: proc(width, height: int, title: string) {
 	// glfw error handling
 	error_callback :: proc "c" (error: i32, desc: cstring) {
@@ -1298,7 +1340,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	glfw.MakeContextCurrent(s.window)
 }
 
-// Loads OpenGL 3.3
+// Loads all OpenGL 3.3 function pointers via GLFW's proc address resolver.
 @private _load_open_gl :: proc() {
 	set_proc_address :: proc(p: rawptr, name: cstring) {
 		(cast(^rawptr)p)^ = rawptr(glfw.GetProcAddress(name))
@@ -1306,7 +1348,8 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	gl.load_up_to(3, 3, set_proc_address)
 }
 
-// Creates the buffers for the default batch renderer
+// Allocates the VAO, VBO and EBO for the batch renderer and pre-bakes the full index buffer.
+// Indices follow the pattern [0,1,2, 0,2,3] per quad (two CCW triangles).
 @private _create_default_batch_buffers :: proc() {
 	gl.GenVertexArrays(1, &s.batch.vao)
 	gl.GenBuffers(1, &s.batch.vbo)
@@ -1355,8 +1398,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	}
 }
 
-// Generates a basic white texture rectangle 1x1.
-// Will be used for drawing simple colorized rectangles.
+// Creates a 1×1 white RGBA texture used as the default for all solid-color shape draws.
 @private _gen_basic_rect_texture :: proc() {
 	pixels := [4]u8{255, 255, 255, 255}
 	s.batch.basic_texture.width = 1
@@ -1371,7 +1413,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, i32(s.batch.basic_texture.width), i32(s.batch.basic_texture.height), 0, gl.RGBA, gl.UNSIGNED_BYTE, &pixels[0])
 }
 
-// Updates the delta time 
+// Measures elapsed time since the last frame and stores it in s.delta_time.
 @private _update_frame_time :: proc() {
 	current_time := glfw.GetTime()
 	delta := current_time - s.last_time
@@ -1379,8 +1421,8 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	s.delta_time = f32(delta)
 }
 
-// Appending vertices from draw call.
-// Additionally flushing the batch renderer if necessary.
+// Appends four vertices (one quad) to the batch buffer.
+// Flushes the current batch first if the texture changes, to maintain correct draw order.
 @private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32, shape_type: i32 = SHAPE_TYPE_TEXTURED, shape_data: [4]f32 = {}) {
 	if s.batch.last_texture_id != texture.id {
 		_draw_next_batch(s.batch.last_texture_id)
@@ -1402,8 +1444,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	)
 }
 
-// Rendering the current batch holding the vertex buffer
-// Will clear the vertex buffer when finished
+// Uploads the accumulated vertex buffer to the GPU and issues one indexed draw call, then clears the buffer.
 @private _draw_next_batch :: proc(texture_id: u32) {
 	if len(s.batch.vertices) ==  0 do return
 
@@ -1433,12 +1474,12 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	clear(&s.batch.vertices)
 }
 
-// Get the orthogonal matrix of the current screen size
+// Returns a 2D orthographic projection matrix for the current window size with a top-left origin.
 @private _get_ortho_matrix :: proc() -> Mat4 {
 	return lin.matrix_ortho3d_f32(0, f32(s.width), f32(s.height), 0, -1, 1)
 }
 
-// Updates all key states
+// Advances every keyboard key through the Up → Pressed → Down → Released state machine each frame.
 @private _update_key_states :: proc() {
 	for &key_state, key in s.input_key_states {
 		glfw_key_state := glfw.GetKey(s.window, i32(key))
@@ -1458,7 +1499,8 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	}
 }
 
-// Updates all gamepad states
+// Advances all connected gamepad button and axis states each frame.
+// Tracks input_active_gamepad — the last gamepad with input above the axis threshold.
 @private _update_gamepad_states :: proc() {
 	ACTIVE_AXIS_THRESHOLD :: 0.66
 
@@ -1505,7 +1547,8 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	}
 }
 
-// Checks an input gamepad state to expected
+// Returns true if the button's current state matches any value in any_expected.
+// device=-1 uses the active gamepad (last one with input).
 @private _gamepad_check_game_state :: #force_inline proc(button: GamepadButton, any_expected: []InputState, device := -1) -> bool {
 	assert(device >= -1 && device < MAX_GAMEPADS)
 	device := clamp(device, -1, MAX_GAMEPADS)
@@ -1525,7 +1568,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	return false
 }
 
-// Returns the gamepad input state from any device: 1-8
+// Returns the raw InputState of a button on the given gamepad. device=-1 uses the active gamepad.
 @private _gamepad_get_game_state :: #force_inline proc(button: GamepadButton, device := -1) -> InputState {
 	assert(device >= -1 && device < MAX_GAMEPADS)
 	device := clamp(device, -1, MAX_GAMEPADS)
@@ -1537,10 +1580,12 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	}
 }
 
+// Casts the opaque Sound handle to a typed miniaudio ma.sound pointer.
 @private _ma_sound :: #force_inline proc(sound: Sound) -> ^ma.sound {
 	return cast(^ma.sound)sound.handle
 }
 
+// Casts the opaque AudioBus handle to a typed miniaudio ma.sound_group pointer.
 @private _ma_group :: #force_inline proc(bus: AudioBus) -> ^ma.sound_group {
 	return cast(^ma.sound_group)bus.handle
 }
