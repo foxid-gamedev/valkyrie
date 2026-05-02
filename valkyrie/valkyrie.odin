@@ -70,17 +70,53 @@ Color :: Vec4
 
 
 VALKYRIE_BLUE :: Color{0.025, 0.025, 0.112, 1.0}
-WHITE 		  :: Color{1,1,1,1}
-GRAY			  :: Color{0.5,0.5,0.5,1}
-BLACK 		  :: Color{0,0,0,1}
-RED			  :: Color{1,0,0,1}
-ORANGE 		  :: Color{1,0.5,0,1}
-YELLOW		  :: Color{1,1,0,1}
-GREEN			  :: Color{0,1,0,1}
-CYAN 			  :: Color{0,1,1,1}
-BLUE			  :: Color{0,0,1,1}
-VIOLET		  :: Color{0.5,0,1,1}
-MAGENTA		  :: Color{1,0,1,1}
+TRANSPARENT   :: Color{0.00, 0.00, 0.00, 0.0}
+
+// Grays
+WHITE         :: Color{1.00, 1.00, 1.00, 1}
+LIGHT_GRAY    :: Color{0.78, 0.78, 0.78, 1}
+GRAY          :: Color{0.50, 0.50, 0.50, 1}
+DARK_GRAY     :: Color{0.25, 0.25, 0.25, 1}
+BLACK         :: Color{0.00, 0.00, 0.00, 1}
+
+// Red
+PINK          :: Color{1.00, 0.43, 0.76, 1}
+LIGHT_RED     :: Color{1.00, 0.47, 0.47, 1}
+RED           :: Color{0.90, 0.16, 0.22, 1}
+DARK_RED      :: Color{0.55, 0.07, 0.07, 1}
+MAROON        :: Color{0.75, 0.13, 0.22, 1}
+
+// Orange / Yellow
+LIGHT_ORANGE  :: Color{1.00, 0.75, 0.40, 1}
+ORANGE        :: Color{1.00, 0.63, 0.00, 1}
+DARK_ORANGE   :: Color{0.65, 0.35, 0.00, 1}
+GOLD          :: Color{1.00, 0.80, 0.00, 1}
+YELLOW        :: Color{1.00, 1.00, 0.00, 1}
+
+// Green
+LIGHT_GREEN   :: Color{0.50, 1.00, 0.50, 1}
+GREEN         :: Color{0.00, 0.89, 0.19, 1}
+DARK_GREEN    :: Color{0.00, 0.46, 0.17, 1}
+LIME          :: Color{0.50, 1.00, 0.00, 1}
+
+// Cyan / Blue
+CYAN          :: Color{0.00, 1.00, 1.00, 1}
+TEAL          :: Color{0.00, 0.50, 0.50, 1}
+LIGHT_BLUE    :: Color{0.40, 0.75, 1.00, 1}
+BLUE          :: Color{0.00, 0.47, 0.95, 1}
+DARK_BLUE     :: Color{0.00, 0.32, 0.67, 1}
+NAVY          :: Color{0.00, 0.12, 0.40, 1}
+
+// Violet / Purple
+LIGHT_VIOLET  :: Color{0.78, 0.48, 1.00, 1}
+VIOLET        :: Color{0.53, 0.24, 0.75, 1}
+DARK_VIOLET   :: Color{0.30, 0.08, 0.50, 1}
+MAGENTA       :: Color{1.00, 0.00, 1.00, 1}
+PURPLE        :: Color{0.44, 0.12, 0.49, 1}
+
+// Misc
+BROWN         :: Color{0.50, 0.30, 0.10, 1}
+BEIGE         :: Color{0.83, 0.69, 0.51, 1}
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Constants                                                                                     //
@@ -278,9 +314,8 @@ VerticalAlignment :: enum { Top, Center, Bottom }
 
 AttenuationType :: enum { Inverse, Linear, Exponential }
 
-SHAPE_TYPE_RECT :: 0
-SHAPE_TYPE_CIRCLE :: 1
-SHAPE_TYPE_CIRCLE_LINES :: 2
+SHAPE_TYPE_TEXTURED :: 0
+SHAPE_TYPE_SDF      :: 1
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Internal Valkyrie State                                                                       //
@@ -465,45 +500,59 @@ draw_rectangle :: proc(dest: Rect, tint: Color) {
 	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0)
 }
 
-// Draw s simple unfilled rectangle 
+// Draw a simple unfilled rectangle
 draw_rectangle_lines :: proc(dest: Rect, tint: Color, thickness: f32 = 1) {
 	assert(thickness > 0, "drawing thickness shouldn't be <= 0")
-	tn := max(0.01, thickness)
-	hf := tn * 0.5
-	// line order: top -> right -> bottom -> left
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, dest.w + hf, tn}, tint, 0)
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x + dest.w - hf, dest.y - hf, tn, dest.h + tn}, tint, 0)
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y + dest.h - hf, dest.w + tn, tn}, tint, 0)
-	_render_object(s.batch.basic_texture, {0,0,1,1}, {dest.x - hf, dest.y - hf, tn, dest.h + hf}, tint, 0)
-} 
+	hf := max(0.01, thickness) * 0.5
+	hw := dest.w * 0.5 + hf
+	hh := dest.h * 0.5 + hf
+	expanded := Rect{dest.x - hf, dest.y - hf, dest.w + thickness, dest.h + thickness}
+	_render_object(s.batch.basic_texture, {0,0,1,1}, expanded, tint, 0, SHAPE_TYPE_SDF, {hw, hh, 0, hf})
+}
+
+draw_rectangle_rounded :: proc(dest: Rect, tint: Color, roundness: f32) {
+	hw := dest.w * 0.5
+	hh := dest.h * 0.5
+	r  := min(hw, hh) * clamp(roundness, 0, 1)
+	_render_object(s.batch.basic_texture, {0,0,1,1}, dest, tint, 0, SHAPE_TYPE_SDF, {hw, hh, r, 0})
+}
+
+draw_rectangle_lines_rounded :: proc(dest: Rect, tint: Color, roundness: f32, thickness: f32 = 1) {
+	assert(thickness > 0, "drawing thickness shouldn't be <= 0")
+	hf := max(0.01, thickness) * 0.5
+	hw := dest.w * 0.5 + hf
+	hh := dest.h * 0.5 + hf
+	r  := min(dest.w * 0.5, dest.h * 0.5) * clamp(roundness, 0, 1)
+	expanded := Rect{dest.x - hf, dest.y - hf, dest.w + thickness, dest.h + thickness}
+	_render_object(s.batch.basic_texture, {0,0,1,1}, expanded, tint, 0, SHAPE_TYPE_SDF, {hw, hh, r, hf})
+}
 
 draw_circle :: proc(position: Vec2, radius: f32, tint: Color) {
 	_render_object(
-		s.batch.basic_texture, 
-		{0,0,1,1}, 
+		s.batch.basic_texture,
+		{0, 0, 1, 1},
 		{position.x - radius, position.y - radius, 2 * radius, 2 * radius},
 		tint,
 		0,
-		SHAPE_TYPE_CIRCLE,
+		SHAPE_TYPE_SDF,
+		{radius, radius, radius, 0},
 	)
 }
 
 draw_circle_lines :: proc(position: Vec2, radius: f32, tint: Color, thickness: f32 = 1) {
-	half := thickness * 0.5
-	outer_r := radius + half
-	outer_n := radius / outer_r
-	inner_n := (radius - half) / outer_r
-
+	hf      := max(0.01, thickness) * 0.5
+	outer_r := radius + hf
 	_render_object(
 		s.batch.basic_texture,
 		{0, 0, 1, 1},
 		{position.x - outer_r, position.y - outer_r, 2 * outer_r, 2 * outer_r},
 		tint,
 		0,
-		SHAPE_TYPE_CIRCLE_LINES,
-		{outer_n, inner_n, 0, 0},
+		SHAPE_TYPE_SDF,
+		{outer_r, outer_r, outer_r, hf},
 	)
 }
+
 
 // Draw a texture at position
 draw_texture_pos :: proc(texture: Texture, position: Vec2, origin: Vec2 = {}, scale: Vec2 = {1,1}, tint: Color = WHITE) {
@@ -1159,6 +1208,17 @@ as_color_f32 :: proc(color: [4]byte) -> Color {
 	}
 }
 
+// Fade a color by an alpha value: (= Color.a * alpha)
+fade_color :: proc(color: Color, alpha: f32) -> Color {
+	return {
+		color.r,
+		color.g,
+		color.b,
+		color.a * alpha,
+	}
+}
+
+
 // calculates horizontal text length with size and font type in pixel scale
 measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 	scale := truetype.ScaleForPixelHeight(&s.font_info, font.size)
@@ -1284,7 +1344,7 @@ measure_text :: proc(text: string, font_size: f32, font := s.font) -> f32 {
 
 // Appending vertices from draw call.
 // Additionally flushing the batch renderer if necessary.
-@private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32, shape_type: i32 = SHAPE_TYPE_RECT, shape_data: [4]f32 = {}) {
+@private _render_object :: proc(texture: Texture, source, dest: Rect, tint: Color, layer: i32, shape_type: i32 = SHAPE_TYPE_TEXTURED, shape_data: [4]f32 = {}) {
 	if s.batch.last_texture_id != texture.id {
 		_draw_next_batch(s.batch.last_texture_id)
 		s.batch.last_texture_id = texture.id
