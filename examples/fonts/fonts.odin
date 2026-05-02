@@ -30,7 +30,7 @@ package main
 import vl "../../valkyrie"
 
 main :: proc() {
-   vl.create_window(800, 600, "Window Example")
+   vl.create_window(800, 600, "Fonts")
 defer vl.shutdown()
    vl.set_vsync(true)
 

@@ -29,30 +29,30 @@ package main
 
 import "core:log"
 
-import val "../../valkyrie"
+import vl "../../valkyrie"
 import gl "vendor:OpenGL"
 
 Vertex :: struct {
-	position: val.Vec2,
-	color:    val.Color,
+	position: vl.Vec2,
+	color:    vl.Color,
 }
 
 main :: proc() {
 	context.logger = log.create_console_logger()
-	val.create_window(800, 600, "My Window")
-	defer val.shutdown()
+	vl.create_window(800, 600, "Triangle")
+	defer vl.shutdown()
 
-	shader, shader_ok := val.load_shader("shader/triangle.vs", "shader/triangle.fs")
+	shader, shader_ok := vl.load_shader("shader/triangle.vs", "shader/triangle.fs")
 	vao, vbo := generate_triangle()
 
-	for !val.should_close() {
-		val.poll_events()
+	for !vl.should_close() {
+		vl.poll_events()
 
-		val.render_begin()
-		val.clear_color(val.VALKYRIE_BLUE)
-		val.shader_bind(shader)
+		vl.render_begin()
+		vl.clear_color(vl.VALKYRIE_BLUE)
+		vl.bind_shader(shader)
 		draw_triangle(vao)
-      val.render_end()
+      vl.render_end()
 		free_all(context.temp_allocator)
 	}
 }

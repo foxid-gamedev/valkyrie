@@ -31,7 +31,7 @@ import "core:math"
 import vl "../../valkyrie"
 
 main :: proc() {
-   vl.create_window(800, 600, "Window Example")
+   vl.create_window(800, 600, "Camera")
    defer vl.shutdown()
    vl.set_vsync(true)
 
